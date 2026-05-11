@@ -1,39 +1,137 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>喵Radio</title>
+  <title>miaoRadio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@300..900&family=IBM+Plex+Mono:wght@300;400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main class="app">
-    <header>
-      <h1>喵Radio</h1>
-      <span class="status" id="status">idle</span>
+  <div class="grid-overlay" aria-hidden="true"></div>
+
+  <main class="frame">
+    <header class="topbar">
+      <h1 class="wordmark">miaoRadio</h1>
+      <div class="topbar-actions">
+        <span class="badge" id="modelLabel">OPUS · ASMR</span>
+        <div class="theme-toggle" role="group" aria-label="Theme">
+          <button class="theme-btn active" data-theme="dark">DARK</button>
+          <button class="theme-btn" data-theme="light">LIGHT</button>
+        </div>
+      </div>
     </header>
 
-    <section class="dj-say" id="djSay">
-      <em>跟我说点什么 — 心情、场景、任意一首种子歌曲都行。</em>
+    <section class="panel hero" aria-labelledby="clock">
+      <div class="clock" id="clock">--:--</div>
+      <div class="date-stack">
+        <div class="weekday" id="weekday">—</div>
+        <div class="ymd" id="ymd">—— ——— ————</div>
+      </div>
+      <div class="air-status" id="airStatus">
+        <span class="air-dot"></span>
+        <span class="air-label">OFF AIR</span>
+      </div>
     </section>
-    <audio id="djAudio" preload="auto"></audio>
 
-    <section class="player">
-      <div class="now" id="now"></div>
+    <section class="panel now-panel">
+      <div class="np-row">
+        <div class="np-left">
+          <div class="bars" id="bars" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <div class="np-text">
+            <div class="np-title" id="nowTitle">— · —</div>
+            <div class="np-state" id="nowState">IDLE</div>
+          </div>
+        </div>
+        <div class="controls">
+          <button class="ctrl" id="btnPrev" aria-label="Previous">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.5 3.5v9L5 8zM3 3.5h1.2v9H3z"/></svg>
+          </button>
+          <button class="ctrl" id="btnToggle" aria-label="Play / Pause">
+            <svg id="iconPlay" viewBox="0 0 16 16" aria-hidden="true" style="display:none"><path d="M4 3l9 5-9 5z"/></svg>
+            <svg id="iconPause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3.5h2.2v9H4.5zM9.3 3.5h2.2v9H9.3z"/></svg>
+          </button>
+          <button class="ctrl" id="btnNext" aria-label="Next">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3.5v9L11 8zM11.8 3.5H13v9h-1.2z"/></svg>
+          </button>
+          <button class="ctrl" id="btnStop" aria-label="Stop">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="4" width="8" height="8"/></svg>
+          </button>
+          <button class="ctrl ghost" id="btnHide">HIDE</button>
+          <div class="volume">
+            <span class="vol-label">VOL</span>
+            <input type="range" id="volSlider" min="0" max="100" value="80" aria-label="Volume">
+          </div>
+        </div>
+      </div>
+      <div class="progress">
+        <span class="time" id="curTime">0:00</span>
+        <div class="track-bar"><div class="track-fill" id="trackFill"></div></div>
+        <span class="time" id="totalTime">0:00</span>
+      </div>
+    </section>
+
+    <section class="panel queue-panel">
+      <header class="section-head">
+        <span class="section-title">QUEUE</span>
+        <span class="section-count" id="trackCount">0 TRACKS</span>
+      </header>
+      <ol class="queue" id="queue">
+        <li class="queue-empty">— nothing queued —</li>
+      </ol>
+    </section>
+
+    <section class="panel dj-panel">
+      <header class="dj-head">
+        <div class="brand-mini">
+          <span class="brand-dot"></span>
+          <span class="brand-name">miaoRadio</span>
+        </div>
+        <div class="bars sm" id="djBars" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+      </header>
+      <div class="dj-body">
+        <div class="avatar" aria-hidden="true">
+          <svg viewBox="0 0 40 40">
+            <path d="M7 8 L7 14 L13 14 Z" fill="currentColor"/>
+            <path d="M33 8 L33 14 L27 14 Z" fill="currentColor"/>
+            <path d="M7 13 Q7 30 20 33 Q33 30 33 13 L29 11 L25 14 L15 14 L11 11 Z" fill="currentColor"/>
+            <circle cx="15.5" cy="20" r="1.4" class="eye"/>
+            <circle cx="24.5" cy="20" r="1.4" class="eye"/>
+            <path d="M20 23 L18.5 25 L21.5 25 Z" class="eye"/>
+            <line x1="6" y1="22" x2="12" y2="21" stroke="currentColor" stroke-width="0.4"/>
+            <line x1="6" y1="24" x2="12" y2="24" stroke="currentColor" stroke-width="0.4"/>
+            <line x1="34" y1="22" x2="28" y2="21" stroke="currentColor" stroke-width="0.4"/>
+            <line x1="34" y1="24" x2="28" y2="24" stroke="currentColor" stroke-width="0.4"/>
+          </svg>
+        </div>
+        <div class="dj-msg">
+          <div class="dj-tag">DJ</div>
+          <p class="dj-text" id="djSay">
+            <span class="quote-mark">&ldquo;</span><span id="djSayText">Tell me what to play. A mood, a scene, a song to seed from — anything.</span><span class="quote-mark">&rdquo;</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div id="iframeWrap" class="iframe-wrap">
       <div id="iframeContainer"></div>
-    </section>
+    </div>
 
-    <section class="queue">
-      <h3>队列</h3>
-      <ol id="queue"><li class="empty">尚无曲目</li></ol>
-    </section>
-
-    <section class="meta" id="meta"></section>
+    <div class="meta" id="meta"></div>
   </main>
 
-  <form id="chatForm">
-    <input id="chatInput" placeholder="例：来点适合周日早晨的爵士" autocomplete="off" autofocus>
-    <button type="submit">发</button>
+  <audio id="djAudio" preload="auto"></audio>
+
+  <form id="chatForm" class="chat-form" autocomplete="off">
+    <span class="prompt-glyph">&rsaquo;</span>
+    <input id="chatInput" placeholder="what do you want to hear?" autocomplete="off" autofocus>
+    <button type="submit" id="sendBtn">SEND</button>
   </form>
 
   <script src="https://www.youtube.com/iframe_api"></script>
