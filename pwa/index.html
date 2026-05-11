@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>喵Radio</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>喵Radio</h1>
+      <span class="status" id="status">idle</span>
+    </header>
+
+    <section class="dj-say" id="djSay">
+      <em>跟我说点什么 — 心情、场景、任意一首种子歌曲都行。</em>
+    </section>
+    <audio id="djAudio" preload="auto"></audio>
+
+    <section class="player">
+      <div class="now" id="now"></div>
+      <div id="iframeContainer"></div>
+    </section>
+
+    <section class="queue">
+      <h3>队列</h3>
+      <ol id="queue"><li class="empty">尚无曲目</li></ol>
+    </section>
+
+    <section class="meta" id="meta"></section>
+  </main>
+
+  <form id="chatForm">
+    <input id="chatInput" placeholder="例：来点适合周日早晨的爵士" autocomplete="off" autofocus>
+    <button type="submit">发</button>
+  </form>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="app.js"></script>
+</body>
+</html>
