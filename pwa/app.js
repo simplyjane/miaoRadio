@@ -13,7 +13,27 @@
     pendingPlay: false,
     progressTimer: null,
     volume: 80,
+    // Auto-DJ: prefetch the next batch when remaining queue time drops low.
+    prefetchInflight: false,
+    prefetchToken: 0,         // bumped on manual chat to invalidate stale prefetches
+    pendingNext: null,        // { say, sayAudioUrl, play }
+    waitingForNext: false,    // queue ended but prefetch hasn't resolved yet
   };
+
+  const PREFETCH_THRESHOLD_SEC = 5 * 60;
+  const FALLBACK_TRACK_SEC = 240; // when we can't parse a duration string
+
+  function parseDurationSec(str) {
+    if (typeof str !== 'string') return null;
+    const parts = str.trim().split(':').map((p) => Number(p));
+    if (parts.some((n) => !Number.isFinite(n))) return null;
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    return null;
+  }
+  function trackDur(song) {
+    return parseDurationSec(song?.duration) ?? FALLBACK_TRACK_SEC;
+  }
 
   /* ───── theme toggle ───── */
   const savedTheme = localStorage.getItem('miao.theme') || 'dark';
@@ -54,7 +74,7 @@
     state.player = new YT.Player('iframeContainer', {
       height: '100%',
       width: '100%',
-      playerVars: { autoplay: 0, controls: 1, rel: 0, modestbranding: 1 },
+      playerVars: { autoplay: 1, controls: 1, rel: 0, modestbranding: 1, playsinline: 1 },
       events: {
         onReady: () => {
           state.ytReady = true;
@@ -63,6 +83,7 @@
             state.pendingPlay = false;
             playCurrent();
           }
+          applyAutoShowIfReady();
         },
         onStateChange: (e) => {
           if (e.data === YT.PlayerState.ENDED) {
@@ -111,6 +132,10 @@
     setBars(false);
     stopProgress();
     resetProgress();
+    // Stopping cancels the upcoming auto-set so we don't surprise the user.
+    state.prefetchToken++;
+    state.pendingNext = null;
+    state.waitingForNext = false;
   });
   $('btnHide').addEventListener('click', () => {
     const wrap = $('iframeWrap');
@@ -137,6 +162,11 @@
     setDjText('…', false);
 
     try {
+      // Manual chat invalidates any in-flight or stashed prefetch.
+      state.prefetchToken++;
+      state.pendingNext = null;
+      state.waitingForNext = false;
+
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -144,21 +174,7 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-
-      setDjText(data.say || '(silent)', false);
-      state.queue = data.play || [];
-      state.idx = 0;
-      renderQueue();
-      renderMeta(data);
-
-      if (data.sayAudioUrl) {
-        setNowState('DJ ON AIR');
-        setDjBars(true);
-        await playDjPatter(data.sayAudioUrl);
-        setDjBars(false);
-      }
-      if (state.queue.length) playCurrent();
-      else { setNowState('IDLE'); setAir(false); }
+      await loadShow(data);
     } catch (err) {
       setDjText('ERROR · ' + err.message, true);
       setNowState('ERROR');
@@ -186,12 +202,120 @@
     `).join('');
   }
 
+  /* First user gesture unlocks autoplay. Browsers block media on cold load
+     until any pointerdown/keydown happens; we listen for it once anywhere
+     on the page and immediately call playVideo() on the YT iframe. */
+  let userActivated = false;
+  let pendingPatterUrl = null; // patter we couldn't play because no gesture yet
+
+  function onFirstGesture() {
+    if (userActivated) return;
+    userActivated = true;
+    document.removeEventListener('pointerdown', onFirstGesture, true);
+    document.removeEventListener('keydown', onFirstGesture, true);
+    // Play the queued patter first (if any), then the video.
+    const startNow = () => {
+      if (state.player?.playVideo) {
+        try { state.player.playVideo(); } catch {}
+      }
+    };
+    if (pendingPatterUrl) {
+      const url = pendingPatterUrl;
+      pendingPatterUrl = null;
+      setNowState('DJ ON AIR');
+      setDjBars(true);
+      playDjPatter(url).then(() => {
+        setDjBars(false);
+        startNow();
+      });
+    } else {
+      startNow();
+    }
+  }
+  document.addEventListener('pointerdown', onFirstGesture, true);
+  document.addEventListener('keydown', onFirstGesture, true);
+
+  async function loadShow(data) {
+    setDjText(data.say || '(silent)', false);
+    state.queue = data.play || [];
+    state.idx = 0;
+    renderQueue();
+    renderMeta(data);
+
+    if (!userActivated) {
+      // Cold load — don't attempt audio yet. Stash patter, load the video into
+      // the iframe (which shows the thumbnail), and prompt for any interaction.
+      pendingPatterUrl = data.sayAudioUrl || null;
+      if (state.queue.length) playCurrent();
+      setNowState('▸ TAP ANYWHERE TO START');
+      setAir(false);
+      return;
+    }
+
+    if (data.sayAudioUrl) {
+      setNowState('DJ ON AIR');
+      setDjBars(true);
+      await playDjPatter(data.sayAudioUrl);
+      setDjBars(false);
+    }
+    if (state.queue.length) playCurrent();
+    else { setNowState('IDLE'); setAir(false); }
+  }
+
+  /* ───── auto-start on load ─────
+     Fire the fetch immediately for speed, but only apply the show once the
+     YT iframe player is ready — otherwise we'd race YT init and end up with
+     a queue but no video. The first track may still need one user click
+     because of browser autoplay policies; subsequent transitions are fine. */
+  let autoShowPromise = null;
+  let autoShowApplied = false;
+
+  function startAutoShowFetch() {
+    setNowState('TUNING IN…');
+    setDjText('…', false);
+    autoShowPromise = fetch('/api/auto-show', { method: 'POST' })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      })
+      .catch((err) => {
+        console.warn('[auto-start]', err);
+        return null;
+      });
+  }
+
+  async function applyAutoShowIfReady() {
+    if (autoShowApplied || !autoShowPromise) return;
+    if (!state.ytReady) return;
+    // Skip if the user already started something themselves.
+    if (state.queue.length || state.pendingNext) return;
+    autoShowApplied = true;
+    const data = await autoShowPromise;
+    autoShowPromise = null;
+    if (!data) {
+      setNowState('IDLE');
+      setDjText('Tell me what to play. A mood, a scene, a song to seed from — anything.', false);
+      return;
+    }
+    if (state.queue.length || state.pendingNext) return; // raced with user
+    // Make sure the iframe is visible so the first video isn't hidden.
+    $('iframeWrap').classList.remove('hidden');
+    $('btnHide').textContent = 'HIDE';
+    await loadShow(data);
+  }
+
+  startAutoShowFetch();
+
   function renderMeta(data) {
     const lines = [];
     if (data.reason) lines.push(`reason · ${data.reason}`);
     if (data.segue) lines.push(`segue · ${data.segue}`);
     if (data.misses?.length) lines.push(`misses · ${data.misses.map((m) => m.query).join(' | ')}`);
-    $('meta').textContent = lines.join('\n');
+    const el = $('meta');
+    const base = lines.join('\n');
+    el.dataset.base = base;
+    el.textContent = base;
   }
 
   /* ───── playback navigation ───── */
@@ -212,12 +336,104 @@
     if (state.idx + 1 < state.queue.length) {
       state.idx++;
       playCurrent();
-    } else {
+      return;
+    }
+    // Queue exhausted. If a prefetched continuation is ready, splice it in
+    // after speaking the DJ patter. Otherwise wait for the in-flight prefetch.
+    if (state.pendingNext) {
+      consumePendingNext();
+      return;
+    }
+    if (state.prefetchInflight) {
+      state.waitingForNext = true;
+      setNowState('WAITING FOR NEXT SET');
+      setBars(false);
+      stopProgress();
+      return;
+    }
+    setNowState('END OF QUEUE');
+    setAir(false);
+    setBars(false);
+    stopProgress();
+  }
+
+  async function consumePendingNext() {
+    const next = state.pendingNext;
+    state.pendingNext = null;
+    state.waitingForNext = false;
+    if (!next || !next.play?.length) {
       setNowState('END OF QUEUE');
       setAir(false);
       setBars(false);
       stopProgress();
+      return;
     }
+    setDjText(next.say || '(silent)', false);
+    renderMeta(next);
+    if (next.sayAudioUrl) {
+      setNowState('DJ ON AIR');
+      setAir(true);
+      setDjBars(true);
+      await playDjPatter(next.sayAudioUrl);
+      setDjBars(false);
+    }
+    state.queue = state.queue.concat(next.play);
+    state.idx = state.idx + 1; // step into the first new track
+    renderQueue();
+    playCurrent();
+  }
+
+  function remainingQueueSec() {
+    if (!state.queue.length) return 0;
+    let total = 0;
+    const cur = state.player?.getCurrentTime?.() ?? 0;
+    const dur = state.player?.getDuration?.() ?? 0;
+    if (dur > 0) total += Math.max(0, dur - cur);
+    else total += trackDur(state.queue[state.idx]);
+    for (let i = state.idx + 1; i < state.queue.length; i++) {
+      total += trackDur(state.queue[i]);
+    }
+    return total;
+  }
+
+  function maybeStartPrefetch() {
+    if (state.prefetchInflight || state.pendingNext) return;
+    if (!state.queue.length) return;
+    if (remainingQueueSec() > PREFETCH_THRESHOLD_SEC) return;
+    startPrefetch();
+  }
+
+  async function startPrefetch() {
+    state.prefetchInflight = true;
+    const token = ++state.prefetchToken;
+    renderPrefetchHint('PREPARING NEXT SET…');
+    try {
+      const res = await fetch('/api/auto-show', { method: 'POST' });
+      const data = await res.json();
+      if (token !== state.prefetchToken) return; // invalidated
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (!data.play?.length) {
+        renderPrefetchHint('AUTO-DJ · NO PICKS');
+        return;
+      }
+      state.pendingNext = data;
+      renderPrefetchHint(`NEXT SET READY · ${data.play.length} TRACK${data.play.length === 1 ? '' : 'S'}`);
+      // If the queue already ended while we were fetching, splice in now.
+      if (state.waitingForNext) consumePendingNext();
+    } catch (err) {
+      console.warn('[auto-show]', err);
+      renderPrefetchHint('AUTO-DJ ERROR · ' + (err.message || 'unknown'));
+    } finally {
+      state.prefetchInflight = false;
+    }
+  }
+
+  function renderPrefetchHint(text) {
+    const el = document.getElementById('meta');
+    if (!el) return;
+    const base = (el.dataset.base ?? el.textContent ?? '').replace(/\n?auto · .*/i, '').trim();
+    el.dataset.base = base;
+    el.textContent = (base ? base + '\n' : '') + 'auto · ' + text;
   }
 
   function playPrev() {
@@ -273,6 +489,7 @@
     $('totalTime').textContent = fmtTime(dur);
     const pct = dur > 0 ? Math.min(100, (cur / dur) * 100) : 0;
     $('trackFill').style.width = pct + '%';
+    maybeStartPrefetch();
   }
   function resetProgress() {
     $('curTime').textContent = '0:00';

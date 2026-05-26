@@ -57,6 +57,14 @@ export function getRecentMessages(limit = 10) {
   return stmtRecentMessages.all(limit).reverse();
 }
 
+const stmtLastUserMessage = db.prepare(
+  `SELECT content FROM messages WHERE role = 'user' ORDER BY ts DESC LIMIT 1`,
+);
+
+export function getLastUserMessage() {
+  return stmtLastUserMessage.get()?.content ?? null;
+}
+
 export function getRecentPlays(limit = 30) {
   return stmtRecentPlays.all(limit);
 }

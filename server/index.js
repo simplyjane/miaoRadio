@@ -1,6 +1,6 @@
 import express from 'express';
 import path from 'node:path';
-import { handleChat } from './router.js';
+import { handleChat, handleAutoShow } from './router.js';
 import { searchSongs } from './ytmusic.js';
 import { recordPlay } from './state.js';
 
@@ -25,6 +25,16 @@ app.post('/api/chat', async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error('[chat]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/auto-show', async (_req, res) => {
+  try {
+    const result = await handleAutoShow();
+    res.json(result);
+  } catch (e) {
+    console.error('[auto-show]', e);
     res.status(500).json({ error: e.message });
   }
 });

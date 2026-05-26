@@ -2,12 +2,31 @@ import { callClaude, parseDJResponse } from './claude.js';
 import { buildSystemPrompt } from './context.js';
 import { searchSongs } from './ytmusic.js';
 import { synthesizeAndCache } from './tts.js';
-import { recordMessage } from './state.js';
+import { recordMessage, getLastUserMessage } from './state.js';
 
 export async function handleChat(message) {
   recordMessage('user', message);
-  const system = await buildSystemPrompt({ userMessage: message });
-  const wrapper = await callClaude({ system, user: message });
+  return runDJ({ trigger: message, langHint: message });
+}
+
+export async function handleAutoShow() {
+  const trigger = [
+    '[AUTO-CONTINUE]',
+    'The current on-air queue is about to run out. Continue your show.',
+    'Pick 4–6 fresh tracks that fit RIGHT NOW: time of day, weather, mood signals,',
+    'today\'s calendar, and the user\'s taste corpus. Do NOT repeat anything in RECENTLY PLAYED.',
+    'In <say>, write a short on-air transition (1–2 sentences) — like a radio DJ bridging into the next set.',
+    'No questions; the listener is not at the keyboard. Just keep the show going.',
+  ].join(' ');
+  // Use the user's most recent real message for language detection so the
+  // auto-segment doesn't switch language just because the trigger is English.
+  const langHint = getLastUserMessage();
+  return runDJ({ trigger, langHint });
+}
+
+async function runDJ({ trigger, langHint }) {
+  const system = await buildSystemPrompt({ userMessage: langHint });
+  const wrapper = await callClaude({ system, user: trigger });
 
   if (wrapper.is_error || (wrapper.subtype && wrapper.subtype !== 'success')) {
     throw new Error(`claude error: ${wrapper.result || JSON.stringify(wrapper).slice(0, 200)}`);
