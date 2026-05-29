@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -16,20 +16,24 @@
     <header class="topbar">
       <h1 class="wordmark">miaoRadio</h1>
       <div class="topbar-actions">
-        <span class="badge" id="modelLabel">OPUS · ASMR</span>
         <div class="auth-pill" id="authPill" hidden>
           <span class="auth-name" id="authName">—</span>
-          <button class="auth-btn" id="settingsBtn" type="button" hidden>SETTINGS</button>
+          <button class="auth-btn" id="settingsBtn" type="button" data-i18n="settings" hidden>SETTINGS</button>
           <button class="auth-btn" id="authBtn" type="button">SIGN IN</button>
         </div>
+        <div class="lang-toggle" role="group" aria-label="Language">
+          <button class="lang-btn active" data-lang="en">EN</button>
+          <button class="lang-btn" data-lang="fr">FR</button>
+        </div>
         <div class="theme-toggle" role="group" aria-label="Theme">
-          <button class="theme-btn active" data-theme="dark">DARK</button>
-          <button class="theme-btn" data-theme="light">LIGHT</button>
+          <button class="theme-btn active" data-theme="dark" data-i18n="dark">DARK</button>
+          <button class="theme-btn" data-theme="light" data-i18n="light">LIGHT</button>
         </div>
       </div>
     </header>
 
     <section class="panel hero" aria-labelledby="clock">
+      <canvas class="hero-shader" id="heroShader" aria-hidden="true"></canvas>
       <div class="clock" id="clock">--:--</div>
       <div class="date-stack">
         <div class="weekday" id="weekday">—</div>
@@ -37,7 +41,7 @@
       </div>
       <div class="air-status" id="airStatus">
         <span class="air-dot"></span>
-        <span class="air-label">OFF AIR</span>
+        <span class="air-label" id="airLabel" data-i18n="air_off">OFF AIR</span>
       </div>
     </section>
 
@@ -49,7 +53,7 @@
           </div>
           <div class="np-text">
             <div class="np-title" id="nowTitle">— · —</div>
-            <div class="np-state" id="nowState">IDLE</div>
+            <div class="np-state" id="nowState" data-i18n="idle">IDLE</div>
           </div>
         </div>
         <div class="controls">
@@ -66,9 +70,9 @@
           <button class="ctrl" id="btnStop" aria-label="Stop">
             <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="4" width="8" height="8"/></svg>
           </button>
-          <button class="ctrl ghost" id="btnHide">HIDE</button>
+          <button class="ctrl ghost" id="btnHide" data-i18n="hide">HIDE</button>
           <div class="volume">
-            <span class="vol-label">VOL</span>
+            <span class="vol-label" data-i18n="vol">VOL</span>
             <input type="range" id="volSlider" min="0" max="100" value="80" aria-label="Volume">
           </div>
         </div>
@@ -82,11 +86,11 @@
 
     <section class="panel queue-panel">
       <header class="section-head">
-        <span class="section-title">QUEUE</span>
+        <span class="section-title" data-i18n="queue">QUEUE</span>
         <span class="section-count" id="trackCount">0 TRACKS</span>
       </header>
       <ol class="queue" id="queue">
-        <li class="queue-empty">— nothing queued —</li>
+        <li class="queue-empty" data-i18n="nothing_queued">— nothing queued —</li>
       </ol>
     </section>
 
@@ -118,13 +122,13 @@
         <div class="dj-msg">
           <div class="dj-tag">DJ</div>
           <p class="dj-text" id="djSay">
-            <span class="quote-mark">&ldquo;</span><span id="djSayText">Tell me what to play. A mood, a scene, a song to seed from — anything.</span><span class="quote-mark">&rdquo;</span>
+            <span class="quote-mark">&ldquo;</span><span id="djSayText" data-i18n="welcome_anon">Tell me what to play. A mood, a scene, a song to seed from — anything.</span><span class="quote-mark">&rdquo;</span>
           </p>
         </div>
       </div>
     </section>
 
-    <div id="iframeWrap" class="iframe-wrap">
+    <div id="iframeWrap" class="iframe-wrap hidden">
       <div id="iframeContainer"></div>
     </div>
 
@@ -136,42 +140,42 @@
   <div class="modal" id="settingsModal" hidden>
     <div class="modal-card settings-card">
       <header class="modal-head">
-        <span class="modal-title">SETTINGS</span>
+        <span class="modal-title" data-i18n="settings">SETTINGS</span>
         <button class="modal-close" id="settingsClose" type="button" aria-label="Close">×</button>
       </header>
       <div class="modal-error" id="settingsError" hidden></div>
       <div class="modal-success" id="settingsOk" hidden></div>
 
       <form id="settingsForm" autocomplete="off">
-        <h3 class="settings-section-title">TASTE CORPUS</h3>
-        <p class="settings-help">Free-form notes the DJ uses to know you. Languages you like, artists, decades, vibes, references.</p>
+        <h3 class="settings-section-title" data-i18n="taste_corpus">TASTE CORPUS</h3>
+        <p class="settings-help" data-i18n="taste_corpus_help">Free-form notes the DJ uses to know you. Languages you like, artists, decades, vibes, references.</p>
 
-        <label class="modal-label" for="setTaste">TASTE</label>
-        <textarea id="setTaste" rows="6" placeholder="What kinds of music move you?"></textarea>
+        <label class="modal-label" for="setTaste" data-i18n="taste">TASTE</label>
+        <textarea id="setTaste" rows="6" data-i18n-placeholder="taste_placeholder" placeholder="What kinds of music move you?"></textarea>
 
-        <label class="modal-label" for="setRoutines">ROUTINES</label>
-        <textarea id="setRoutines" rows="4" placeholder="e.g. 9–12 deep work, 17–22 reading"></textarea>
+        <label class="modal-label" for="setRoutines" data-i18n="routines">ROUTINES</label>
+        <textarea id="setRoutines" rows="4" data-i18n-placeholder="routines_placeholder" placeholder="e.g. 9–12 deep work, 17–22 reading"></textarea>
 
-        <label class="modal-label" for="setMood">MOOD RULES</label>
-        <textarea id="setMood" rows="4" placeholder="anxious → ambient · focus → instrumental"></textarea>
+        <label class="modal-label" for="setMood" data-i18n="mood_rules">MOOD RULES</label>
+        <textarea id="setMood" rows="4" data-i18n-placeholder="mood_placeholder" placeholder="anxious → ambient · focus → instrumental"></textarea>
 
-        <h3 class="settings-section-title">ENVIRONMENT</h3>
+        <h3 class="settings-section-title" data-i18n="environment">ENVIRONMENT</h3>
 
-        <label class="modal-label" for="setCity">WEATHER CITY</label>
-        <input id="setCity" placeholder="Montreal">
+        <label class="modal-label" for="setCity" data-i18n="weather_city">WEATHER CITY</label>
+        <input id="setCity" data-i18n-placeholder="city_placeholder" placeholder="Montreal">
 
-        <label class="modal-label" for="setVoice">FISH AUDIO REFERENCE ID</label>
-        <input id="setVoice" placeholder="(leave blank for default voice)">
+        <label class="modal-label" for="setVoice" data-i18n="fish_voice">FISH AUDIO REFERENCE ID</label>
+        <input id="setVoice" data-i18n-placeholder="voice_placeholder" placeholder="(leave blank for default voice)">
 
-        <h3 class="settings-section-title">GOOGLE CALENDAR</h3>
+        <h3 class="settings-section-title" data-i18n="google_calendar">GOOGLE CALENDAR</h3>
         <div class="calendar-row">
-          <span class="calendar-status" id="calStatus">Not connected</span>
-          <button type="button" class="calendar-btn" id="calConnectBtn">CONNECT</button>
-          <button type="button" class="calendar-btn" id="calDisconnectBtn" hidden>DISCONNECT</button>
+          <span class="calendar-status" id="calStatus" data-i18n="cal_not_connected">Not connected</span>
+          <button type="button" class="calendar-btn" id="calConnectBtn" data-i18n="cal_connect">CONNECT</button>
+          <button type="button" class="calendar-btn" id="calDisconnectBtn" data-i18n="cal_disconnect" hidden>DISCONNECT</button>
         </div>
 
         <div class="settings-actions">
-          <button type="submit" class="google-btn" id="settingsSaveBtn">SAVE</button>
+          <button type="submit" class="google-btn" id="settingsSaveBtn" data-i18n="save">SAVE</button>
         </div>
       </form>
     </div>
@@ -180,13 +184,13 @@
   <div class="modal" id="loginModal" hidden>
     <div class="modal-card">
       <header class="modal-head">
-        <span class="modal-title">JOIN miaoRadio</span>
+        <span class="modal-title" data-i18n="join">JOIN miaoRadio</span>
         <button class="modal-close" id="loginClose" type="button" aria-label="Close">×</button>
       </header>
-      <p class="modal-lede" id="loginLede">Enter your invitation code, then sign in with Google.</p>
+      <p class="modal-lede" id="loginLede" data-i18n="login_lede">Enter your invitation code, then sign in with Google.</p>
       <div class="modal-error" id="loginError" hidden></div>
       <form id="loginForm" autocomplete="off">
-        <label class="modal-label" for="inviteCode">INVITATION CODE</label>
+        <label class="modal-label" for="inviteCode" data-i18n="invitation_code_label">INVITATION CODE</label>
         <input id="inviteCode" name="inviteCode" placeholder="XXXXXXXXXX" autocomplete="off" spellcheck="false">
         <div class="invite-status" id="inviteStatus"></div>
         <button class="google-btn" id="googleBtn" type="submit" disabled>
@@ -196,7 +200,7 @@
             <path d="M3.98 10.7A5.4 5.4 0 0 1 3.7 9c0-.6.1-1.17.28-1.7V4.96H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.04l3.02-2.34z" fill="#FBBC05"/>
             <path d="M9 3.58c1.32 0 2.5.46 3.44 1.35l2.58-2.58A9 9 0 0 0 9 0 9 9 0 0 0 .96 4.96L3.98 7.3C4.68 5.16 6.66 3.58 9 3.58z" fill="#EA4335"/>
           </svg>
-          <span>SIGN IN WITH GOOGLE</span>
+          <span data-i18n="sign_in_with_google">SIGN IN WITH GOOGLE</span>
         </button>
       </form>
     </div>
@@ -204,8 +208,8 @@
 
   <form id="chatForm" class="chat-form" autocomplete="off">
     <span class="prompt-glyph">&rsaquo;</span>
-    <input id="chatInput" placeholder="what do you want to hear?" autocomplete="off" autofocus>
-    <button type="submit" id="sendBtn">SEND</button>
+    <input id="chatInput" data-i18n-placeholder="chat_placeholder" placeholder="what do you want to hear?" autocomplete="off" autofocus>
+    <button type="submit" id="sendBtn" data-i18n="send">SEND</button>
   </form>
 
   <script src="https://www.youtube.com/iframe_api"></script>

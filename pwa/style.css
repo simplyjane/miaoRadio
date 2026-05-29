@@ -111,8 +111,8 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   letter-spacing: 0.16em;
 }
 
-.theme-toggle { display: flex; }
-.theme-btn {
+.theme-toggle, .lang-toggle { display: flex; }
+.theme-btn, .lang-btn {
   background: transparent;
   border: 1px solid var(--line);
   color: var(--text-dim);
@@ -124,13 +124,13 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   cursor: pointer;
   transition: background .15s ease, color .15s ease;
 }
-.theme-btn + .theme-btn { border-left: 0; }
-.theme-btn:hover { color: var(--text); }
-.theme-btn.active {
+.theme-btn + .theme-btn, .lang-btn + .lang-btn { border-left: 0; }
+.theme-btn:hover, .lang-btn:hover { color: var(--text); }
+.theme-btn.active, .lang-btn.active {
   background: var(--text);
   color: var(--bg);
 }
-.theme-btn:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.theme-btn:focus-visible, .lang-btn:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 
 /* ─── PANELS w/ corner registration marks ─────────────────────────────── */
 
@@ -149,6 +149,8 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
 /* ─── HERO / CLOCK ─────────────────────────────────────────────────────── */
 
 .hero {
+  position: relative;
+  overflow: hidden;
   padding: 44px 24px 30px;
   text-align: center;
   background-image:
@@ -160,6 +162,18 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   background-size: 12px 12px, auto, auto, auto, auto;
   background-position: 0 0, top left, top right, bottom left, bottom right;
 }
+.hero-shader {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+  /* Light theme makes the dark shader output too dim — invert it. */
+}
+[data-theme="light"] .hero-shader { filter: invert(1) hue-rotate(180deg); }
+.hero > .clock,
+.hero > .date-stack,
+.hero > .air-status { position: relative; z-index: 1; }
 
 .clock {
   font-family: var(--font-display);
@@ -818,4 +832,47 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
 @media (max-width: 600px) {
   .rx-btn { width: 30px; height: 28px; font-size: 13px; }
   .queue li .qartist { display: none; }
+}
+
+/* ─── LOADING STATES ──────────────────────────────────────────────────── */
+.queue li.queue-skeleton {
+  opacity: .6;
+  color: var(--text-faint);
+}
+.queue li.queue-skeleton .qidx { color: var(--text-faint); }
+.skel-bar {
+  display: inline-block;
+  height: 10px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--line) 60%, transparent) 0%,
+    color-mix(in srgb, var(--text-faint) 80%, transparent) 50%,
+    color-mix(in srgb, var(--line) 60%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.4s linear infinite;
+  border-radius: 1px;
+  vertical-align: middle;
+}
+.skel-title { width: min(70%, 240px); }
+.skel-artist { width: 80px; }
+.skel-btn { width: 22px; height: 22px; margin-right: 2px; }
+@keyframes skel-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+/* Animated dots on the DJ patter while thinking */
+.dj-text.thinking #djSayText::after {
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+  animation: thinking-dots 1.4s steps(4, end) infinite;
+  content: '';
+}
+@keyframes thinking-dots {
+  0%        { content: ''; }
+  25%       { content: '.'; }
+  50%       { content: '..'; }
+  75%, 100% { content: '...'; }
 }

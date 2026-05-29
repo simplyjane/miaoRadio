@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import { handleChat, handleAutoShow } from './router.js';
 import { searchSongs } from './ytmusic.js';
+import { lookupCityForIp } from './geo.js';
 import {
   recordPlay,
   getCorpus,
@@ -34,6 +35,8 @@ const PORT = Number(process.env.PORT ?? 8080);
 const ROOT = path.resolve(import.meta.dirname, '..');
 
 const app = express();
+// Respect X-Forwarded-For so req.ip is the client behind a reverse proxy.
+app.set('trust proxy', true);
 app.use(express.json({ limit: '256kb' }));
 app.use(express.static(path.join(ROOT, 'pwa')));
 app.use('/tts', express.static(path.join(ROOT, 'cache/tts'), {
@@ -106,6 +109,21 @@ function requireSignedIn(req, res) {
     return null;
   }
   return user;
+}
+
+// Backfill weather_city from the client IP one time per user. Subsequent
+// requests skip immediately because the field is set.
+async function ensureGeoCity(user, req) {
+  if (!user) return;
+  const existing = getSettings(user.id);
+  if (existing?.weather_city) return;
+  const geo = await lookupCityForIp(req.ip).catch(() => null);
+  if (geo?.city) {
+    setSettings(user.id, {
+      weather_city: geo.city,
+      tts_reference_id: existing?.tts_reference_id || null,
+    });
+  }
 }
 
 app.get('/api/me/corpus', async (req, res) => {
@@ -206,6 +224,7 @@ app.post('/api/chat', async (req, res) => {
       chats_limit: GUEST_CHAT_LIMIT,
     });
   }
+  await ensureGeoCity(user, req);
   try {
     const result = await handleChat(message.trim(), user);
     res.json({ ...result, user: publicUserShape({ ...user, chats_used: user.chats_used + (user.is_guest ? 1 : 0) }) });
@@ -219,6 +238,7 @@ app.post('/api/auto-show', async (req, res) => {
   const user = resolveUser(req, res);
   if (!user) return res.status(401).json({ error: 'signin_required' });
   if (user.is_guest) return res.status(403).json({ error: 'signin_required' });
+  await ensureGeoCity(user, req);
   try {
     const result = await handleAutoShow(user);
     res.json(result);
@@ -235,8 +255,8 @@ app.get('/api/reactions', (req, res) => {
 });
 
 app.post('/api/reactions', (req, res) => {
-  const user = resolveUser(req, res);
-  if (!user) return res.status(401).json({ error: 'no_session' });
+  const user = requireSignedIn(req, res);
+  if (!user) return;
   const { videoId, reaction, title, artist } = req.body ?? {};
   if (typeof videoId !== 'string' || !videoId) {
     return res.status(400).json({ error: 'videoId required' });

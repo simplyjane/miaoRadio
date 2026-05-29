@@ -8,6 +8,7 @@
   const state = {
     user: null,           // null | { id, email, name, picture, isGuest, chatsUsed, chatsLimit }
     reactions: new Map(), // videoId → 1 (like) | -1 (dislike)
+    loading: false,       // true while waiting for /api/chat or /api/auto-show to return a queue
     queue: [],
     idx: 0,
     ytReady: false,
@@ -37,11 +38,197 @@
     return parseDurationSec(song?.duration) ?? FALLBACK_TRACK_SEC;
   }
 
+  /* ───── i18n (EN / FR) ───── */
+  const STRINGS = {
+    en: {
+      dark: 'DARK', light: 'LIGHT',
+      sign_in: 'SIGN IN', sign_up: 'SIGN UP', sign_out: 'SIGN OUT',
+      settings: 'SETTINGS', guest: 'GUEST',
+      guest_chats_left: 'GUEST · {remaining}/{limit} CHATS LEFT',
+      signed_in: 'SIGNED IN',
+      air_on: 'ON AIR', air_off: 'OFF AIR',
+      idle: 'IDLE', playing: 'PLAYING', paused: 'PAUSED', buffering: 'BUFFERING',
+      thinking: 'THINKING', tuning_in: 'TUNING IN…', dj_on_air: 'DJ ON AIR',
+      end_of_queue: 'END OF QUEUE', waiting_for_next: 'WAITING FOR NEXT SET',
+      tap_to_start: '▸ TAP ANYWHERE TO START',
+      yt_error: 'YT ERROR · SKIPPING',
+      sign_up_to_continue: 'SIGN UP TO CONTINUE',
+      error_state: 'ERROR',
+      vol: 'VOL', hide: 'HIDE', show: 'SHOW',
+      queue: 'QUEUE',
+      track_count_one: '{n} TRACK', track_count_many: '{n} TRACKS',
+      nothing_queued: '— nothing queued —',
+      pulling_tracks: 'PULLING TRACKS…',
+      like: 'Like', dislike: 'Dislike — never play again',
+      welcome_anon: 'Tell me what to play. A mood, a scene, a song to seed from — anything.',
+      welcome_guest_one: 'Welcome — you have {n} trial chat. Tell me what to play.',
+      welcome_guest_many: 'Welcome — you have {n} trial chats. Tell me what to play.',
+      welcome_guest_zero: 'Your {limit} trial chats are used up. Sign up to keep going — your taste and history carry over.',
+      reading_the_room: 'Reading the room',
+      trial_limit_reached: 'Trial limit reached.',
+      error_prefix: 'ERROR · {msg}',
+      chat_placeholder: 'what do you want to hear?', send: 'SEND',
+      join: 'JOIN miaoRadio',
+      login_lede: 'Enter your invitation code, then sign in with Google.',
+      login_lede_chats_used: "You've used your {limit} trial chats. Sign up to keep going — your taste profile and history carry over.",
+      invitation_code_label: 'INVITATION CODE',
+      sign_in_with_google: 'SIGN IN WITH GOOGLE',
+      invite_valid: '✓ valid',
+      invite_invalid: '✗ invalid code',
+      invite_network_error: '✗ network error',
+      err_invalid_code: 'That invitation code is not valid.',
+      err_invalid_state: 'Sign-in expired. Please try again.',
+      err_missing_params: 'Google did not return the expected parameters. Please retry.',
+      react_signup_lede: 'Sign up to save your likes and dislikes — they teach the DJ what to play (and never play) for you.',
+      taste_corpus: 'TASTE CORPUS',
+      taste_corpus_help: 'Free-form notes the DJ uses to know you. Languages you like, artists, decades, vibes, references.',
+      taste: 'TASTE', routines: 'ROUTINES', mood_rules: 'MOOD RULES',
+      environment: 'ENVIRONMENT', weather_city: 'WEATHER CITY',
+      fish_voice: 'FISH AUDIO REFERENCE ID', google_calendar: 'GOOGLE CALENDAR',
+      cal_not_connected: 'Not connected',
+      cal_connect: 'CONNECT', cal_disconnect: 'DISCONNECT',
+      cal_connected: 'Connected',
+      cal_connected_with: 'Connected · {email}',
+      save: 'SAVE', saved: 'Saved.',
+      save_failed: 'Save failed: {err}',
+      calendar_connected_msg: 'Google Calendar connected.',
+      load_settings_failed: 'Failed to load settings: {err}',
+      taste_placeholder: 'What kinds of music move you?',
+      routines_placeholder: 'e.g. 9–12 deep work, 17–22 reading',
+      mood_placeholder: 'anxious → ambient · focus → instrumental',
+      city_placeholder: 'Montreal',
+      voice_placeholder: '(leave blank for default voice)',
+      preparing_next: 'PREPARING NEXT SET…',
+      next_set_ready_one: 'NEXT SET READY · 1 TRACK',
+      next_set_ready_many: 'NEXT SET READY · {n} TRACKS',
+      auto_no_picks: 'AUTO-DJ · NO PICKS',
+      auto_error: 'AUTO-DJ ERROR · {err}',
+    },
+    fr: {
+      dark: 'SOMBRE', light: 'CLAIR',
+      sign_in: 'CONNEXION', sign_up: 'INSCRIPTION', sign_out: 'DÉCONNEXION',
+      settings: 'PARAMÈTRES', guest: 'INVITÉ',
+      guest_chats_left: 'INVITÉ · {remaining}/{limit} ESSAIS',
+      signed_in: 'CONNECTÉ',
+      air_on: 'EN ONDES', air_off: 'HORS ONDES',
+      idle: 'INACTIF', playing: 'LECTURE', paused: 'PAUSE', buffering: 'CHARGEMENT',
+      thinking: 'RÉFLEXION', tuning_in: 'RECHERCHE…', dj_on_air: 'DJ EN ONDES',
+      end_of_queue: 'FIN DE LA FILE', waiting_for_next: 'EN ATTENTE DU PROCHAIN SET',
+      tap_to_start: '▸ TOUCHEZ POUR DÉMARRER',
+      yt_error: 'ERREUR YT · IGNORÉ',
+      sign_up_to_continue: 'INSCRIVEZ-VOUS POUR CONTINUER',
+      error_state: 'ERREUR',
+      vol: 'VOL', hide: 'CACHER', show: 'AFFICHER',
+      queue: 'FILE',
+      track_count_one: '{n} TITRE', track_count_many: '{n} TITRES',
+      nothing_queued: '— rien en file —',
+      pulling_tracks: 'CHARGEMENT DES TITRES…',
+      like: "J'aime", dislike: 'Ne plus jamais jouer',
+      welcome_anon: "Dites-moi quoi jouer. Une ambiance, une scène, une chanson à partir de laquelle on commence — n'importe quoi.",
+      welcome_guest_one: "Bienvenue — il vous reste {n} conversation d'essai. Dites-moi quoi jouer.",
+      welcome_guest_many: "Bienvenue — il vous reste {n} conversations d'essai. Dites-moi quoi jouer.",
+      welcome_guest_zero: "Vos {limit} conversations d'essai sont épuisées. Inscrivez-vous pour continuer — vos goûts et votre historique seront conservés.",
+      reading_the_room: "Je lis l'ambiance",
+      trial_limit_reached: "Limite d'essai atteinte.",
+      error_prefix: 'ERREUR · {msg}',
+      chat_placeholder: 'que voulez-vous entendre ?', send: 'ENVOYER',
+      join: 'REJOINDRE miaoRadio',
+      login_lede: "Entrez votre code d'invitation, puis connectez-vous avec Google.",
+      login_lede_chats_used: "Vous avez utilisé vos {limit} conversations d'essai. Inscrivez-vous pour continuer — votre profil et votre historique seront conservés.",
+      invitation_code_label: "CODE D'INVITATION",
+      sign_in_with_google: 'SE CONNECTER AVEC GOOGLE',
+      invite_valid: '✓ valide',
+      invite_invalid: '✗ code invalide',
+      invite_network_error: '✗ erreur réseau',
+      err_invalid_code: "Ce code d'invitation n'est pas valide.",
+      err_invalid_state: 'Connexion expirée. Veuillez réessayer.',
+      err_missing_params: "Google n'a pas renvoyé les paramètres attendus. Veuillez réessayer.",
+      react_signup_lede: "Inscrivez-vous pour sauvegarder vos préférences — elles apprennent au DJ ce qu'il doit jouer (et ne jamais jouer).",
+      taste_corpus: 'CORPUS DE GOÛTS',
+      taste_corpus_help: 'Notes libres que le DJ utilise pour vous connaître. Langues préférées, artistes, époques, ambiances, références.',
+      taste: 'GOÛTS', routines: 'ROUTINES', mood_rules: "RÈGLES D'HUMEUR",
+      environment: 'ENVIRONNEMENT', weather_city: 'VILLE MÉTÉO',
+      fish_voice: 'ID DE RÉFÉRENCE FISH AUDIO', google_calendar: 'CALENDRIER GOOGLE',
+      cal_not_connected: 'Non connecté',
+      cal_connect: 'CONNECTER', cal_disconnect: 'DÉCONNECTER',
+      cal_connected: 'Connecté',
+      cal_connected_with: 'Connecté · {email}',
+      save: 'ENREGISTRER', saved: 'Enregistré.',
+      save_failed: "Échec de l'enregistrement : {err}",
+      calendar_connected_msg: 'Calendrier Google connecté.',
+      load_settings_failed: 'Échec du chargement des paramètres : {err}',
+      taste_placeholder: 'Quels styles de musique vous touchent ?',
+      routines_placeholder: 'ex. 9h–12h travail concentré, 17h–22h lecture',
+      mood_placeholder: 'anxieux → ambient · concentration → instrumental',
+      city_placeholder: 'Montréal',
+      voice_placeholder: '(laisser vide pour la voix par défaut)',
+      preparing_next: 'PRÉPARATION DU PROCHAIN SET…',
+      next_set_ready_one: 'PROCHAIN SET PRÊT · 1 TITRE',
+      next_set_ready_many: 'PROCHAIN SET PRÊT · {n} TITRES',
+      auto_no_picks: 'AUTO-DJ · AUCUN CHOIX',
+      auto_error: 'ERREUR AUTO-DJ · {err}',
+    },
+  };
+
+  let lang = (() => {
+    const saved = localStorage.getItem('miao.lang');
+    if (saved === 'en' || saved === 'fr') return saved;
+    const browser = (navigator.language || 'en').toLowerCase();
+    return browser.startsWith('fr') ? 'fr' : 'en';
+  })();
+
+  function t(key, params) {
+    let s = (STRINGS[lang] && STRINGS[lang][key]) || STRINGS.en[key] || key;
+    if (params) for (const [k, v] of Object.entries(params)) s = s.split('{' + k + '}').join(v);
+    return s;
+  }
+
+  function localeForLang() { return lang === 'fr' ? 'fr-CA' : 'en-CA'; }
+
+  function applyStaticI18n() {
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      el.textContent = t(el.dataset.i18n);
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+      el.placeholder = t(el.dataset.i18nPlaceholder);
+    });
+  }
+
+  function setLang(l) {
+    lang = (l === 'fr') ? 'fr' : 'en';
+    localStorage.setItem('miao.lang', lang);
+    document.documentElement.lang = lang;
+    document.querySelectorAll('.lang-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.lang === lang);
+    });
+    applyStaticI18n();
+    // Re-render dynamic state that depends on language.
+    renderAuthPill(state.user);
+    tickClock();
+    if (state.queue.length === 0 && !state.loading) {
+      // Refresh the queue placeholder if it's currently empty/idle.
+      renderQueue();
+    }
+    // If the IDLE welcome message is showing, refresh it.
+    if (!state.queue.length && !state.player?.getPlayerState?.()) {
+      const remaining = state.user ? state.user.chatsLimit - state.user.chatsUsed : null;
+      let msg;
+      if (state.user?.isGuest && remaining <= 0) msg = t('welcome_guest_zero', { limit: state.user.chatsLimit });
+      else if (state.user?.isGuest) msg = t(remaining === 1 ? 'welcome_guest_one' : 'welcome_guest_many', { n: remaining });
+      else if (!state.user) msg = t('welcome_anon');
+      else msg = null;
+      if (msg) setDjText(msg, false);
+    }
+  }
+
   /* ───── theme toggle ───── */
   const savedTheme = localStorage.getItem('miao.theme') || 'dark';
   setTheme(savedTheme);
   document.querySelectorAll('.theme-btn').forEach((btn) => {
     btn.addEventListener('click', () => setTheme(btn.dataset.theme));
+  });
+  document.querySelectorAll('.lang-btn').forEach((btn) => {
+    btn.addEventListener('click', () => setLang(btn.dataset.lang));
   });
   function setTheme(theme) {
     root.setAttribute('data-theme', theme);
@@ -51,19 +238,34 @@
     });
   }
 
+  /* ───── iframe visibility (persisted, hidden by default) ───── */
+  function setIframeHidden(hidden) {
+    $('iframeWrap').classList.toggle('hidden', hidden);
+    $('btnHide').textContent = hidden ? t('show') : t('hide');
+    localStorage.setItem('miao.iframeHidden', hidden ? '1' : '0');
+  }
+  {
+    const saved = localStorage.getItem('miao.iframeHidden');
+    setIframeHidden(saved == null ? true : saved === '1');
+  }
+
   /* ───── clock ticker ───── */
   function tickClock() {
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, '0');
     const mm = String(now.getMinutes()).padStart(2, '0');
     $('clock').textContent = `${hh}:${mm}`;
-    const weekday = now.toLocaleDateString('en-US', { weekday: 'long' });
+    const loc = localeForLang();
+    const weekday = now.toLocaleDateString(loc, { weekday: 'long' });
     const dd = String(now.getDate()).padStart(2, '0');
-    const mon = now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+    const mon = now.toLocaleDateString(loc, { month: 'short' }).toUpperCase();
     const yy = now.getFullYear();
     $('weekday').textContent = weekday;
     $('ymd').textContent = `${dd} · ${mon} · ${yy}`;
   }
+  applyStaticI18n();
+  document.querySelectorAll('.lang-btn').forEach((b) => b.classList.toggle('active', b.dataset.lang === lang));
+  document.documentElement.lang = lang;
   tickClock();
   setInterval(tickClock, 1000 * 15);
   setInterval(() => {
@@ -94,23 +296,23 @@
           }
           if (e.data === YT.PlayerState.PLAYING) {
             setAir(true);
-            setNowState('PLAYING');
+            setNowState(t('playing'));
             setIcon('pause');
             setBars(true);
             startProgress();
           }
           if (e.data === YT.PlayerState.PAUSED) {
-            setNowState('PAUSED');
+            setNowState(t('paused'));
             setIcon('play');
             setBars(false);
             stopProgress();
           }
           if (e.data === YT.PlayerState.BUFFERING) {
-            setNowState('BUFFERING');
+            setNowState(t('buffering'));
           }
         },
         onError: () => {
-          setNowState('YT ERROR · SKIPPING');
+          setNowState(t('yt_error'));
           setTimeout(playNext, 700);
         },
       },
@@ -129,7 +331,7 @@
   $('btnStop').addEventListener('click', () => {
     state.player?.stopVideo();
     setAir(false);
-    setNowState('IDLE');
+    setNowState(t('idle'));
     setIcon('pause');
     setBars(false);
     stopProgress();
@@ -140,9 +342,7 @@
     state.waitingForNext = false;
   });
   $('btnHide').addEventListener('click', () => {
-    const wrap = $('iframeWrap');
-    const hidden = wrap.classList.toggle('hidden');
-    $('btnHide').textContent = hidden ? 'SHOW' : 'HIDE';
+    setIframeHidden(!$('iframeWrap').classList.contains('hidden'));
   });
 
   /* ───── volume ───── */
@@ -160,8 +360,9 @@
     input.value = '';
     const send = $('sendBtn');
     send.disabled = true;
-    setNowState('THINKING');
-    setDjText('…', false);
+    setNowState(t('thinking'));
+    setDjText(t('reading_the_room'), false);
+    setLoading(true, t('pulling_tracks'));
 
     try {
       // Manual chat invalidates any in-flight or stashed prefetch.
@@ -177,19 +378,25 @@
       });
       const data = await res.json();
       if (res.status === 402 && data.error === 'signup_required') {
+        setLoading(false);
         openLoginModal({
-          lede: `You've used your ${data.chats_limit} trial chats. Sign up to keep going — your taste profile and history carry over.`,
+          lede: t('login_lede_chats_used', { limit: data.chats_limit }),
         });
-        setNowState('SIGN UP TO CONTINUE');
-        setDjText('Trial limit reached.', true);
+        setNowState(t('sign_up_to_continue'));
+        setDjText(t('trial_limit_reached'), true);
         return;
       }
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      if (data.user) renderAuthPill(data.user);
+      if (data.user) {
+        state.user = data.user;
+        renderAuthPill(data.user);
+      }
+      setLoading(false);
       await loadShow(data);
     } catch (err) {
-      setDjText('ERROR · ' + err.message, true);
-      setNowState('ERROR');
+      setLoading(false);
+      setDjText(t('error_prefix', { msg: err.message }), true);
+      setNowState(t('error_state'));
       setAir(false);
     } finally {
       send.disabled = false;
@@ -200,11 +407,13 @@
   /* ───── queue rendering ───── */
   function renderQueue() {
     const el = $('queue');
-    $('trackCount').textContent = `${state.queue.length} TRACK${state.queue.length === 1 ? '' : 'S'}`;
-    if (!state.queue.length) {
-      el.innerHTML = '<li class="queue-empty">— nothing queued —</li>';
+    const n = state.queue.length;
+    $('trackCount').textContent = t(n === 1 ? 'track_count_one' : 'track_count_many', { n });
+    if (!n) {
+      el.innerHTML = `<li class="queue-empty">${esc(t('nothing_queued'))}</li>`;
       return;
     }
+    const likeLabel = t('like'), dislikeLabel = t('dislike');
     el.innerHTML = state.queue.map((s, i) => {
       const r = state.reactions.get(s.videoId) || 0;
       return `
@@ -213,18 +422,48 @@
           <span class="qtitle">${esc(s.title || s.query || '?')}</span>
           <span class="qartist">${esc(s.artist || '')}</span>
           <span class="qreact">
-            <button class="rx-btn ${r === 1 ? 'on' : ''}" data-vid="${esc(s.videoId)}" data-rxn="1" title="Like" type="button">♥</button>
-            <button class="rx-btn ${r === -1 ? 'on bad' : ''}" data-vid="${esc(s.videoId)}" data-rxn="-1" title="Dislike — never play again" type="button">⊘</button>
+            <button class="rx-btn ${r === 1 ? 'on' : ''}" data-vid="${esc(s.videoId)}" data-rxn="1" title="${esc(likeLabel)}" type="button">♥</button>
+            <button class="rx-btn ${r === -1 ? 'on bad' : ''}" data-vid="${esc(s.videoId)}" data-rxn="-1" title="${esc(dislikeLabel)}" type="button">⊘</button>
           </span>
         </li>
       `;
     }).join('');
   }
 
+  function renderLoadingQueue(label) {
+    if (label == null) label = t('pulling_tracks');
+    const el = $('queue');
+    $('trackCount').textContent = label;
+    el.innerHTML = Array.from({ length: 5 }, (_, i) => `
+      <li class="queue-skeleton">
+        <span class="qidx">${String(i + 1).padStart(2, '0')}</span>
+        <span class="skel-bar skel-title"></span>
+        <span class="skel-bar skel-artist"></span>
+        <span class="qreact" aria-hidden="true">
+          <span class="skel-bar skel-btn"></span>
+          <span class="skel-bar skel-btn"></span>
+        </span>
+      </li>
+    `).join('');
+  }
+
+  function setLoading(on, label) {
+    state.loading = on;
+    const dj = $('djSay');
+    dj.classList.toggle('thinking', on);
+    if (on) renderLoadingQueue(label);
+  }
+
   // Event delegation: one listener for all thumb buttons (rerender swaps DOM).
   $('queue').addEventListener('click', (e) => {
     const btn = e.target.closest('.rx-btn');
     if (!btn) return;
+    // Guests can't save reactions — prompt them to sign up instead of silently
+    // pretending the click worked.
+    if (!state.user || state.user.isGuest) {
+      openLoginModal({ lede: t('react_signup_lede') });
+      return;
+    }
     const videoId = btn.dataset.vid;
     const clicked = Number(btn.dataset.rxn);
     if (!videoId || !clicked) return;
@@ -273,7 +512,7 @@
       state.player?.stopVideo?.();
       stopProgress();
       resetProgress();
-      setNowState('IDLE');
+      setNowState(t('idle'));
       setBars(false);
       setAir(false);
       renderQueue();
@@ -343,19 +582,19 @@
       // the iframe (which shows the thumbnail), and prompt for any interaction.
       pendingPatterUrl = data.sayAudioUrl || null;
       if (state.queue.length) playCurrent();
-      setNowState('▸ TAP ANYWHERE TO START');
+      setNowState(t('tap_to_start'));
       setAir(false);
       return;
     }
 
     if (data.sayAudioUrl) {
-      setNowState('DJ ON AIR');
+      setNowState(t('dj_on_air'));
       setDjBars(true);
       await playDjPatter(data.sayAudioUrl);
       setDjBars(false);
     }
     if (state.queue.length) playCurrent();
-    else { setNowState('IDLE'); setAir(false); }
+    else { setNowState(t('idle')); setAir(false); }
   }
 
   /* ───── auto-start on load ─────
@@ -369,15 +608,22 @@
   function startAutoShowFetch() {
     // Guests can't auto-DJ. Show a welcome state instead.
     if (!state.user || state.user.isGuest) {
-      setNowState('IDLE');
-      setDjText(state.user?.isGuest
-        ? `Welcome — you have ${state.user.chatsLimit - state.user.chatsUsed} trial chats. Tell me what to play.`
-        : 'Tell me what to play. A mood, a scene, a song to seed from — anything.',
-        false);
+      setNowState(t('idle'));
+      const remaining = state.user ? state.user.chatsLimit - state.user.chatsUsed : null;
+      let msg;
+      if (state.user?.isGuest && remaining <= 0) {
+        msg = t('welcome_guest_zero', { limit: state.user.chatsLimit });
+      } else if (state.user?.isGuest) {
+        msg = t(remaining === 1 ? 'welcome_guest_one' : 'welcome_guest_many', { n: remaining });
+      } else {
+        msg = t('welcome_anon');
+      }
+      setDjText(msg, false);
       return;
     }
-    setNowState('TUNING IN…');
-    setDjText('…', false);
+    setNowState(t('tuning_in'));
+    setDjText(t('reading_the_room'), false);
+    setLoading(true, t('tuning_in'));
     autoShowPromise = fetch('/api/auto-show', { method: 'POST', credentials: 'same-origin' })
       .then(async (res) => {
         const data = await res.json();
@@ -399,14 +645,13 @@
     const data = await autoShowPromise;
     autoShowPromise = null;
     if (!data) {
-      setNowState('IDLE');
-      setDjText('Tell me what to play. A mood, a scene, a song to seed from — anything.', false);
+      setLoading(false);
+      setNowState(t('idle'));
+      setDjText(t('welcome_anon'), false);
       return;
     }
-    if (state.queue.length || state.pendingNext) return; // raced with user
-    // Make sure the iframe is visible so the first video isn't hidden.
-    $('iframeWrap').classList.remove('hidden');
-    $('btnHide').textContent = 'HIDE';
+    if (state.queue.length || state.pendingNext) { setLoading(false); return; }
+    setLoading(false);
     await loadShow(data);
   }
 
@@ -460,15 +705,15 @@
     pill.hidden = false;
     if (!user || user.isGuest) {
       const label = user
-        ? `GUEST · ${user.chatsLimit - user.chatsUsed}/${user.chatsLimit} CHATS LEFT`
-        : 'GUEST';
+        ? t('guest_chats_left', { remaining: user.chatsLimit - user.chatsUsed, limit: user.chatsLimit })
+        : t('guest');
       name.textContent = label;
-      btn.textContent = 'SIGN UP';
+      btn.textContent = t('sign_up');
       btn.dataset.action = 'open';
       settingsBtn.hidden = true;
     } else {
-      name.textContent = (user.email || user.name || 'SIGNED IN').toUpperCase();
-      btn.textContent = 'SIGN OUT';
+      name.textContent = (user.email || user.name || t('signed_in')).toUpperCase();
+      btn.textContent = t('sign_out');
       btn.dataset.action = 'signout';
       settingsBtn.hidden = false;
     }
@@ -484,20 +729,20 @@
     openLoginModal();
   });
 
-  const ERROR_MESSAGES = {
-    invalid_code: 'That invitation code is not valid.',
-    invalid_invite: 'That invitation code is not valid.',
-    invalid_state: 'Sign-in expired. Please try again.',
-    missing_params: 'Google did not return the expected parameters. Please retry.',
+  const ERROR_KEYS = {
+    invalid_code: 'err_invalid_code',
+    invalid_invite: 'err_invalid_code',
+    invalid_state: 'err_invalid_state',
+    missing_params: 'err_missing_params',
   };
 
   function openLoginModal({ lede, errorCode } = {}) {
     const modal = $('loginModal');
     const ledeEl = $('loginLede');
     const errEl = $('loginError');
-    if (lede) ledeEl.textContent = lede;
+    ledeEl.textContent = lede || t('login_lede');
     if (errorCode) {
-      errEl.textContent = ERROR_MESSAGES[errorCode] || errorCode;
+      errEl.textContent = ERROR_KEYS[errorCode] ? t(ERROR_KEYS[errorCode]) : errorCode;
       errEl.hidden = false;
     } else {
       errEl.hidden = true;
@@ -529,15 +774,15 @@
       try {
         const res = await fetch(`/api/auth/validate-code?code=${encodeURIComponent(code)}`);
         if (res.ok) {
-          statusEl.textContent = '✓ valid';
+          statusEl.textContent = t('invite_valid');
           statusEl.className = 'invite-status ok';
           btn.disabled = false;
         } else {
-          statusEl.textContent = '✗ invalid code';
+          statusEl.textContent = t('invite_invalid');
           statusEl.className = 'invite-status bad';
         }
       } catch {
-        statusEl.textContent = '✗ network error';
+        statusEl.textContent = t('invite_network_error');
         statusEl.className = 'invite-status bad';
       }
     }, 250);
@@ -567,7 +812,7 @@
     $('settingsError').hidden = true;
     $('settingsOk').hidden = true;
     if (flash === 'calendar_ok') {
-      $('settingsOk').textContent = 'Google Calendar connected.';
+      $('settingsOk').textContent = t('calendar_connected_msg');
       $('settingsOk').hidden = false;
     }
     try {
@@ -584,7 +829,7 @@
       $('setVoice').value = settings.tts_reference_id || '';
       renderCalendarStatus(settings);
     } catch (err) {
-      $('settingsError').textContent = 'Failed to load settings: ' + err.message;
+      $('settingsError').textContent = t('load_settings_failed', { err: err.message });
       $('settingsError').hidden = false;
     }
   }
@@ -598,11 +843,13 @@
     const connectBtn = $('calConnectBtn');
     const disconnectBtn = $('calDisconnectBtn');
     if (calendar_connected) {
-      statusEl.textContent = calendar_email ? `Connected · ${calendar_email}` : 'Connected';
+      statusEl.textContent = calendar_email
+        ? t('cal_connected_with', { email: calendar_email })
+        : t('cal_connected');
       connectBtn.hidden = true;
       disconnectBtn.hidden = false;
     } else {
-      statusEl.textContent = 'Not connected';
+      statusEl.textContent = t('cal_not_connected');
       connectBtn.hidden = false;
       disconnectBtn.hidden = true;
     }
@@ -645,10 +892,10 @@
         }),
       });
       if (!settingsRes.ok) throw new Error('settings save failed');
-      $('settingsOk').textContent = 'Saved.';
+      $('settingsOk').textContent = t('saved');
       $('settingsOk').hidden = false;
     } catch (err) {
-      $('settingsError').textContent = 'Save failed: ' + err.message;
+      $('settingsError').textContent = t('save_failed', { err: err.message });
       $('settingsError').hidden = false;
     } finally {
       btn.disabled = false;
@@ -694,12 +941,12 @@
     }
     if (state.prefetchInflight) {
       state.waitingForNext = true;
-      setNowState('WAITING FOR NEXT SET');
+      setNowState(t('waiting_for_next'));
       setBars(false);
       stopProgress();
       return;
     }
-    setNowState('END OF QUEUE');
+    setNowState(t('end_of_queue'));
     setAir(false);
     setBars(false);
     stopProgress();
@@ -710,7 +957,7 @@
     state.pendingNext = null;
     state.waitingForNext = false;
     if (!next || !next.play?.length) {
-      setNowState('END OF QUEUE');
+      setNowState(t('end_of_queue'));
       setAir(false);
       setBars(false);
       stopProgress();
@@ -719,7 +966,7 @@
     setDjText(next.say || '(silent)', false);
     renderMeta(next);
     if (next.sayAudioUrl) {
-      setNowState('DJ ON AIR');
+      setNowState(t('dj_on_air'));
       setAir(true);
       setDjBars(true);
       await playDjPatter(next.sayAudioUrl);
@@ -748,39 +995,33 @@
     if (state.prefetchInflight || state.pendingNext) return;
     if (!state.queue.length) return;
     if (remainingQueueSec() > PREFETCH_THRESHOLD_SEC) return;
-    // Auto-DJ continuation is signed-in-only. Guests get manually-seeded
-    // shows; the queue ends in IDLE and they can chat (or sign up).
-    if (!state.user || state.user.isGuest) {
-      renderPrefetchHint('AUTO-DJ · SIGN IN TO CONTINUE');
-      return;
-    }
+    // Auto-DJ continuation is signed-in-only. Visitors silently let the
+    // queue play through to the end; no hint, no fetch, no surprises.
+    if (!state.user || state.user.isGuest) return;
     startPrefetch();
   }
 
   async function startPrefetch() {
     state.prefetchInflight = true;
     const token = ++state.prefetchToken;
-    renderPrefetchHint('PREPARING NEXT SET…');
+    renderPrefetchHint(t('preparing_next'));
     try {
       const res = await fetch('/api/auto-show', { method: 'POST', credentials: 'same-origin' });
       const data = await res.json();
       if (token !== state.prefetchToken) return; // invalidated
-      if (res.status === 401 || res.status === 403) {
-        renderPrefetchHint('AUTO-DJ · SIGN IN TO CONTINUE');
-        return;
-      }
+      if (res.status === 401 || res.status === 403) return;
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       if (!data.play?.length) {
-        renderPrefetchHint('AUTO-DJ · NO PICKS');
+        renderPrefetchHint(t('auto_no_picks'));
         return;
       }
       state.pendingNext = data;
-      renderPrefetchHint(`NEXT SET READY · ${data.play.length} TRACK${data.play.length === 1 ? '' : 'S'}`);
+      renderPrefetchHint(t(data.play.length === 1 ? 'next_set_ready_one' : 'next_set_ready_many', { n: data.play.length }));
       // If the queue already ended while we were fetching, splice in now.
       if (state.waitingForNext) consumePendingNext();
     } catch (err) {
       console.warn('[auto-show]', err);
-      renderPrefetchHint('AUTO-DJ ERROR · ' + (err.message || 'unknown'));
+      renderPrefetchHint(t('auto_error', { err: err.message || 'unknown' }));
     } finally {
       state.prefetchInflight = false;
     }
@@ -885,5 +1126,209 @@
       }
       document.getElementById('djSayText').textContent = text;
     }
+  }
+
+  /* ───── hero shader background ─────
+     Volumetric raymarcher from Shadertoy s3j3zd (msm01 / FabriceNeyret2).
+     WebGL2 fullscreen quad; pauses when tab is hidden. */
+  initHeroShader();
+  function initHeroShader() {
+    const hero = document.querySelector('.hero');
+    const canvas = $('heroShader');
+    if (!hero || !canvas) return;
+    const gl = canvas.getContext('webgl2', { antialias: false, premultipliedAlpha: false });
+    if (!gl) { canvas.remove(); return; } // fallback: dot grid stays
+
+    const vsSrc = `#version 300 es
+void main() {
+  vec2 p = vec2(gl_VertexID & 1, (gl_VertexID >> 1) & 1) * 2.0 - 1.0;
+  gl_Position = vec4(p, 0, 1);
+}`;
+
+    const fsSrc = `#version 300 es
+precision highp float;
+uniform vec2 iResolutionXY;
+uniform float iTime;
+uniform float iAudio; // 0..1 — driven by DJ patter RMS or fake pulse
+out vec4 fragColor;
+
+#define iResolution vec3(iResolutionXY, 1.0)
+#define A(x, y) abs(dot(sin(x), vec3(y)))
+
+void mainImage(out vec4 o, vec2 u) {
+  o = vec4(0.0);
+  float i = 0.0, d = 0.0, s, l;
+  // Audio nudges time forward (creates pulsing motion) and a wave-frequency
+  // modulation factor that broadens the band of moving sine waves on beats.
+  float t = iTime + sin(iTime) / 2.0 + iAudio * 0.35;
+  float waveAmp = 1.0 + iAudio * 1.4;
+  vec3 q = vec3(0.0), p, r = iResolution;
+  for(; i++ < 1e2;
+      l = length(vec2(d - 130., p.x)),
+      p *= vec3(.125, .6, 1),
+      d += s = min(.2 + .4*abs(q.y + 2e1 + sin(l*.2 - t*1e1) * waveAmp),
+                   .3 + .3*abs(3. - length(p.xy)) + step(q.y, -12.)),
+      o += 1.0/s)
+      for(p = vec3((u + u - r.xy)/r.y*d, d - 7e1),
+          q = p,
+          p.yz *= mat2(cos(1.2 + vec4(0, 33, 11, 0))),
+          p.z += t*3e1,
+          s = .03; s < 4.; s += s)
+          p.yz -= A(t + t + .32*p/s, s),
+          q += A(.3*q.z + t + .7*q/s, s/8.);
+
+  // Brighten on beats by shrinking the tanh divisor.
+  o = tanh(o*o / (2e4 / (1.0 + iAudio * 1.5)));
+}
+
+void main() {
+  vec4 o = vec4(0.0);
+  mainImage(o, gl_FragCoord.xy);
+  fragColor = vec4(o.rgb, 1.0);
+}`;
+
+    function compile(type, src) {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.error('[hero-shader compile]', gl.getShaderInfoLog(sh));
+        return null;
+      }
+      return sh;
+    }
+
+    const vs = compile(gl.VERTEX_SHADER, vsSrc);
+    const fs = compile(gl.FRAGMENT_SHADER, fsSrc);
+    if (!vs || !fs) { canvas.remove(); return; }
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error('[hero-shader link]', gl.getProgramInfoLog(prog));
+      canvas.remove();
+      return;
+    }
+    gl.useProgram(prog);
+    const uTime = gl.getUniformLocation(prog, 'iTime');
+    const uRes = gl.getUniformLocation(prog, 'iResolutionXY');
+    const uAudio = gl.getUniformLocation(prog, 'iAudio');
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+
+    /* ── audio analysis: real RMS during DJ patter, fake pulse during music ── */
+    let audioCtx = null, analyser = null, td = null, audioReady = false;
+    function ensureAudio() {
+      if (audioReady) return;
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.55;
+        td = new Uint8Array(analyser.fftSize);
+        const djAudio = $('djAudio');
+        if (djAudio) {
+          const src = audioCtx.createMediaElementSource(djAudio);
+          src.connect(analyser);
+          analyser.connect(audioCtx.destination); // still hear the patter
+        }
+        audioReady = true;
+      } catch (e) {
+        console.warn('[hero-audio]', e.message);
+      }
+    }
+    // Browsers require a user gesture before AudioContext can start.
+    const onceForAudio = () => {
+      ensureAudio();
+      document.removeEventListener('pointerdown', onceForAudio, true);
+      document.removeEventListener('keydown', onceForAudio, true);
+    };
+    document.addEventListener('pointerdown', onceForAudio, true);
+    document.addEventListener('keydown', onceForAudio, true);
+
+    function readPatterLevel() {
+      if (!audioReady) return 0;
+      const dj = $('djAudio');
+      if (!dj || dj.paused || dj.ended) return 0;
+      analyser.getByteTimeDomainData(td);
+      let sum = 0;
+      for (let i = 0; i < td.length; i++) {
+        const v = (td[i] - 128) / 128;
+        sum += v * v;
+      }
+      return Math.min(1, Math.sqrt(sum / td.length) * 4); // boost so quiet speech still moves things
+    }
+
+    function fakePulse(tSec) {
+      // Compound sines plus a slower kick to read as "music pulse".
+      const a = 0.45 * Math.abs(Math.sin(tSec * 2.6));
+      const b = 0.25 * Math.abs(Math.sin(tSec * 5.7 + 0.7));
+      const kick = 0.35 * Math.pow(Math.abs(Math.sin(tSec * 1.05)), 8);
+      return Math.min(1, a + b + kick);
+    }
+
+    function ytIsPlaying() {
+      const PLAYING = window.YT?.PlayerState?.PLAYING;
+      if (PLAYING == null) return false;
+      return state.player?.getPlayerState?.() === PLAYING;
+    }
+
+    let audioLevel = 0;
+
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      const w = Math.max(1, hero.clientWidth);
+      const h = Math.max(1, hero.clientHeight);
+      const pw = Math.floor(w * dpr);
+      const ph = Math.floor(h * dpr);
+      if (canvas.width !== pw || canvas.height !== ph) {
+        canvas.width = pw;
+        canvas.height = ph;
+        gl.viewport(0, 0, pw, ph);
+      }
+    }
+    new ResizeObserver(resize).observe(hero);
+    resize();
+
+    const t0 = performance.now();
+    let running = true;
+    let rafId = 0;
+
+    function frame() {
+      if (!running) return;
+      resize();
+      const tSec = (performance.now() - t0) / 1000;
+
+      // Source the audio drive: real RMS from patter takes priority; otherwise
+      // run the fake pulse while YT is playing; silence when idle.
+      const patter = readPatterLevel();
+      let target = 0;
+      if (patter > 0.01) target = patter;
+      else if (ytIsPlaying()) target = fakePulse(tSec) * 0.65;
+      else if (state.loading) {
+        // Slow, breath-like pulse so the user can see the page is alive.
+        target = 0.25 + 0.25 * Math.sin(tSec * 2.0);
+      }
+      audioLevel += (target - audioLevel) * 0.18;
+
+      gl.uniform1f(uTime, tSec);
+      gl.uniform2f(uRes, canvas.width, canvas.height);
+      gl.uniform1f(uAudio, audioLevel);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      rafId = requestAnimationFrame(frame);
+    }
+    rafId = requestAnimationFrame(frame);
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        running = false;
+        cancelAnimationFrame(rafId);
+      } else if (!running) {
+        running = true;
+        rafId = requestAnimationFrame(frame);
+      }
+    });
   }
 })();
