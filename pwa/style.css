@@ -71,8 +71,15 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   z-index: 1;
   max-width: var(--frame-w);
   margin: 0 auto;
-  padding: 28px 16px 0;
+  padding: 28px 16px calc(20px + env(safe-area-inset-bottom));
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
 }
+/* The DJ conversation surface always docks at the bottom of the viewport,
+   so when you read "Tell me what to play…" the input is right under it.
+   Anything above it (queue, controls, hero) sits in normal flow above. */
+.frame > .dj-panel { margin-top: auto; }
 
 /* ─── TOP BAR ──────────────────────────────────────────────────────────── */
 
@@ -534,7 +541,7 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   display: grid;
   grid-template-columns: 80px 1fr;
   gap: 18px;
-  padding: 20px 24px 24px;
+  padding: 20px 24px 14px;
   align-items: start;
 }
 
@@ -613,29 +620,33 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   min-height: 1em;
 }
 
-/* ─── CHAT FORM (fixed bottom) ────────────────────────────────────────── */
+/* ─── CHAT FORM (inline inside .dj-panel; the DJ talks above, you answer here) ──
+   Sits flush against the DJ message so the prompt "Tell me what to play…"
+   and the input feel like one continuous breath. The dotted divider above
+   matches the existing dotted-line motif used throughout the radio. */
 
 .chat-form {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  z-index: 10;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0;
+  margin: 4px 24px 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
   background: var(--bg);
-  border-top: 1px solid var(--line);
-  padding: 12px 24px calc(12px + env(safe-area-inset-bottom));
   font-family: inherit;
+  /* corner-tick marks on the input box echo the panel's registration marks,
+     framing the prompt like a terminal cell */
+  background-image:
+    linear-gradient(var(--text-faint), var(--text-faint)),
+    linear-gradient(var(--text-faint), var(--text-faint)),
+    linear-gradient(var(--text-faint), var(--text-faint)),
+    linear-gradient(var(--text-faint), var(--text-faint));
+  background-size: 6px 1px, 1px 6px, 6px 1px, 1px 6px;
+  background-position: top left, top left, bottom right, bottom right;
+  background-repeat: no-repeat;
 }
-.chat-form::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(circle at 1px 1px, var(--grid) 1px, transparent 0);
-  background-size: 14px 14px;
-  pointer-events: none;
-  opacity: 0.5;
-}
+.chat-form:focus-within { border-color: var(--text-dim); }
 .chat-form > * { position: relative; z-index: 1; }
 
 .prompt-glyph {
@@ -645,6 +656,11 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   margin-right: 10px;
   width: 14px;
   line-height: 1;
+  animation: caret-pulse 1.4s ease-in-out infinite;
+}
+@keyframes caret-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
 }
 
 #chatInput {
@@ -697,7 +713,7 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   .queue li { grid-template-columns: 24px 1fr auto auto; gap: 10px; padding: 10px 16px; }
   .queue li .qartist { font-size: 11px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
   .progress { padding: 8px 16px 14px; }
-  .chat-form { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+  .chat-form { margin: 4px 16px 16px; padding: 10px 12px; }
 }
 
 /* ─── ERROR STATE ─────────────────────────────────────────────────────── */

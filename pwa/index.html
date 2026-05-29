@@ -94,6 +94,12 @@
       </ol>
     </section>
 
+    <div id="iframeWrap" class="iframe-wrap hidden">
+      <div id="iframeContainer"></div>
+    </div>
+
+    <div class="meta" id="meta"></div>
+
     <section class="panel dj-panel">
       <header class="dj-head">
         <div class="brand-mini">
@@ -126,13 +132,12 @@
           </p>
         </div>
       </div>
+      <form id="chatForm" class="chat-form" autocomplete="off">
+        <span class="prompt-glyph">&rsaquo;</span>
+        <input id="chatInput" data-i18n-placeholder="chat_placeholder" placeholder="what do you want to hear?" autocomplete="off" autofocus>
+        <button type="submit" id="sendBtn" data-i18n="send">SEND</button>
+      </form>
     </section>
-
-    <div id="iframeWrap" class="iframe-wrap hidden">
-      <div id="iframeContainer"></div>
-    </div>
-
-    <div class="meta" id="meta"></div>
   </main>
 
   <audio id="djAudio" preload="auto"></audio>
@@ -205,12 +210,6 @@
       </form>
     </div>
   </div>
-
-  <form id="chatForm" class="chat-form" autocomplete="off">
-    <span class="prompt-glyph">&rsaquo;</span>
-    <input id="chatInput" data-i18n-placeholder="chat_placeholder" placeholder="what do you want to hear?" autocomplete="off" autofocus>
-    <button type="submit" id="sendBtn" data-i18n="send">SEND</button>
-  </form>
 
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="app.js"></script>

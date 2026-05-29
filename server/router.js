@@ -36,14 +36,26 @@ export async function handleAutoShow(user) {
 }
 
 async function runDJ({ trigger, langHint, user }) {
+  const t0 = Date.now();
   const system = await buildSystemPrompt({ userMessage: langHint, userId: user.id });
+  const tPrompt = Date.now();
+
   const wrapper = await callClaude({ system, user: trigger });
+  const tClaude = Date.now();
 
   if (wrapper.is_error || (wrapper.subtype && wrapper.subtype !== 'success')) {
     throw new Error(`claude error: ${wrapper.result || JSON.stringify(wrapper).slice(0, 200)}`);
   }
 
   const dj = parseDJResponse(wrapper.result ?? '');
+  const tParse = Date.now();
+
+  // Track per-step timing for the parallel block so we can see which side
+  // (YT search vs Fish TTS) is the slow one.
+  const ytStart = Date.now();
+  let ytDone = 0;
+  const ttsStart = Date.now();
+  let ttsDone = 0;
 
   const [enriched, sayAudioUrl] = await Promise.all([
     Promise.all(
@@ -58,14 +70,31 @@ async function runDJ({ trigger, langHint, user }) {
           return { query, error: e.message };
         }
       }),
-    ),
+    ).then((r) => { ytDone = Date.now(); return r; }),
     synthesizeAndCache(dj.say, {
       referenceId: getSettings(user.id)?.tts_reference_id || undefined,
-    }).catch((e) => {
+    }).then((r) => { ttsDone = Date.now(); return r; }).catch((e) => {
       console.warn('[tts]', e.message);
+      ttsDone = Date.now();
       return null;
     }),
   ]);
+  const tEnrich = Date.now();
+
+  const usage = wrapper.usage || {};
+  console.log(
+    `[runDJ] user=${user.id} ` +
+    `total=${tEnrich - t0}ms ` +
+    `prompt=${tPrompt - t0}ms ` +
+    `claude=${tClaude - tPrompt}ms ` +
+    `(in=${usage.input_tokens ?? '?'} ` +
+    `cache_read=${usage.cache_read_input_tokens ?? 0} ` +
+    `out=${usage.output_tokens ?? '?'}) ` +
+    `parse=${tParse - tClaude}ms ` +
+    `yt=${ytDone - ytStart}ms ` +
+    `tts=${ttsDone - ttsStart}ms ` +
+    `tracks=${dj.play.length}`,
+  );
 
   if (dj.say) recordMessage('dj', dj.say, user.id);
 
