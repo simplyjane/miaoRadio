@@ -36,11 +36,24 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          # Strip CRLFs and ensure trailing newline — handles Windows / browser
+          # clipboard mangling silently.
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          echo "── deploy_key file diagnostic ──"
+          echo "  bytes:        $(wc -c < ~/.ssh/deploy_key)"
+          echo "  lines:        $(wc -l < ~/.ssh/deploy_key)"
+          echo "  first line:   $(head -1 ~/.ssh/deploy_key | head -c 60)"
+          echo "  last line:    $(tail -1 ~/.ssh/deploy_key | head -c 60)"
           # Validate it parses as a real SSH key.
-          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null \
-            || { echo "::error::deploy_key is not a valid SSH private key"; exit 1; }
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+            echo "::error::deploy_key is not a valid SSH private key."
+            echo "::error::Most likely: you pasted miaoradio_deploy.pub instead of miaoradio_deploy,"
+            echo "::error::or the key got mangled. On your laptop run:"
+            echo "::error::    cat ~/.ssh/miaoradio_deploy | pbcopy"
+            echo "::error::then paste into the DEPLOY_SSH_KEY secret."
+            exit 1
+          fi
           echo "deploy_key parses OK"
 
       - name: Deploy
