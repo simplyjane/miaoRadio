@@ -293,4 +293,19 @@ app.get('/api/search', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`miaoRadio listening on http://localhost:${PORT}`);
+  // Warm cold caches so the first real chat doesn't pay 60+ seconds for
+  // Innertube to bootstrap. Fire and forget — failures don't block serving.
+  warmup();
 });
+
+async function warmup() {
+  const t0 = Date.now();
+  try {
+    // Initializes Innertube (downloads YT player JS, sets up signing).
+    // Subsequent searchSongs() calls reuse the cached client.
+    const r = await searchSongs('warmup', 1);
+    console.log(`[warmup] yt ready in ${Date.now() - t0}ms (sample: ${r[0]?.title || 'n/a'})`);
+  } catch (e) {
+    console.warn(`[warmup] yt failed: ${e.message}`);
+  }
+}
