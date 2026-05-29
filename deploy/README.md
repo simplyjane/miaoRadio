@@ -112,13 +112,78 @@ Visit `https://miaoradio.pilipalajing.com` in your browser.
 
 ## Updating
 
-Whenever you push new code to `main`, SSH in and:
+After the auto-deploy is set up (next section), **every push to `main` deploys automatically** — no SSH needed. The workflow lives at `.github/workflows/deploy.yml`.
+
+If you ever need to deploy manually (e.g. before auto-deploy is wired up, or to redeploy without pushing a new commit), SSH in and:
 
 ```bash
 bash ~/miaoRadio/deploy/update.sh
 ```
 
-Pulls, reinstalls deps if `package-lock.json` changed, restarts the service.
+Or trigger the workflow manually from the GitHub Actions tab → **Deploy to prod** → **Run workflow**.
+
+## Auto-deploy on push to main (one-time setup)
+
+Set this up once, after the instance is provisioned and the first manual deploy works.
+
+### 1. Generate a deploy key on your laptop
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/miaoradio_deploy -N "" -C "github-actions-miaoradio"
+```
+
+This creates `~/.ssh/miaoradio_deploy` (private) and `~/.ssh/miaoradio_deploy.pub` (public).
+
+### 2. Authorize the public key on the Lightsail instance
+
+```bash
+cat ~/.ssh/miaoradio_deploy.pub | ssh ubuntu@<static-ip> \
+  'cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
+```
+
+Verify:
+
+```bash
+ssh -i ~/.ssh/miaoradio_deploy ubuntu@<static-ip> 'echo ok'
+# → ok
+```
+
+### 3. Add GitHub repo secrets
+
+In <https://github.com/simplyjane/miaoRadio/settings/secrets/actions>, add two repository secrets:
+
+| Name | Value |
+|---|---|
+| `DEPLOY_SSH_KEY` | The full contents of `~/.ssh/miaoradio_deploy` (the private key, including the `-----BEGIN OPENSSH PRIVATE KEY-----` / `-----END OPENSSH PRIVATE KEY-----` lines) |
+| `DEPLOY_HOST` | Your Lightsail static IP, e.g. `18.234.56.78` |
+
+### 4. Test it
+
+Make any small change (e.g. tweak a comment), commit, push to `main`. Watch:
+
+<https://github.com/simplyjane/miaoRadio/actions>
+
+The job should:
+1. Configure SSH from the secrets.
+2. SSH into the instance.
+3. Run `~/miaoRadio/deploy/update.sh` (git pull + npm ci + systemctl restart).
+4. Verify the service is active.
+
+Total runtime: ~30 seconds for a typical no-deps change.
+
+### Rolling back
+
+If a deploy goes sideways, SSH in and revert:
+
+```bash
+cd ~/miaoRadio
+git log --oneline -5            # find the last-good commit
+git reset --hard <sha>
+npm ci
+sudo systemctl restart miaoradio
+```
+
+Then revert the bad commit on GitHub so the next push doesn't re-deploy it.
 
 ## Backing up the DB
 
