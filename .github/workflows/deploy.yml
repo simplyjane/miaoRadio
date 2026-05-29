@@ -18,20 +18,53 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Configure SSH
+      - name: Sanity-check secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ]; then echo "::error::DEPLOY_HOST secret is empty"; exit 1; fi
+          if [ -z "$DEPLOY_SSH_KEY" ]; then echo "::error::DEPLOY_SSH_KEY secret is empty"; exit 1; fi
+          echo "host length: ${#DEPLOY_HOST}"
+          echo "key length:  ${#DEPLOY_SSH_KEY}"
+          echo "key first line: $(echo "$DEPLOY_SSH_KEY" | head -1 | head -c 40)…"
+          echo "key last line:  $(echo "$DEPLOY_SSH_KEY" | tail -1 | head -c 40)…"
+
+      - name: Configure SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+          # Validate it parses as a real SSH key.
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null \
+            || { echo "::error::deploy_key is not a valid SSH private key"; exit 1; }
+          echo "deploy_key parses OK"
 
       - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          ssh -i ~/.ssh/deploy_key ubuntu@"${{ secrets.DEPLOY_HOST }}" \
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=accept-new \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -o ConnectTimeout=10 \
+            -o LogLevel=ERROR \
+            ubuntu@"$DEPLOY_HOST" \
             'bash ~/miaoRadio/deploy/update.sh'
 
       - name: Verify service is running
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          ssh -i ~/.ssh/deploy_key ubuntu@"${{ secrets.DEPLOY_HOST }}" \
-            'systemctl is-active miaoradio && sudo systemctl status miaoradio --no-pager | head -5'
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=accept-new \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -o ConnectTimeout=10 \
+            -o LogLevel=ERROR \
+            ubuntu@"$DEPLOY_HOST" \
+            'systemctl is-active miaoradio'
