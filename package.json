@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch --env-file=.env server/index.js",
-    "start": "node --env-file=.env server/index.js",
-    "auth:google": "node --env-file=.env server/scripts/auth-google.js"
+    "start": "node --env-file=.env server/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
     "better-sqlite3": "^12.9.0",
     "express": "^4.21.2",
     "youtubei.js": "^13.0.0"

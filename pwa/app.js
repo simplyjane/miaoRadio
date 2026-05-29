@@ -6,6 +6,8 @@
 
   const root = document.documentElement;
   const state = {
+    user: null,           // null | { id, email, name, picture, isGuest, chatsUsed, chatsLimit }
+    reactions: new Map(), // videoId → 1 (like) | -1 (dislike)
     queue: [],
     idx: 0,
     ytReady: false,
@@ -170,10 +172,20 @@
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ message }),
       });
       const data = await res.json();
+      if (res.status === 402 && data.error === 'signup_required') {
+        openLoginModal({
+          lede: `You've used your ${data.chats_limit} trial chats. Sign up to keep going — your taste profile and history carry over.`,
+        });
+        setNowState('SIGN UP TO CONTINUE');
+        setDjText('Trial limit reached.', true);
+        return;
+      }
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (data.user) renderAuthPill(data.user);
       await loadShow(data);
     } catch (err) {
       setDjText('ERROR · ' + err.message, true);
@@ -193,13 +205,97 @@
       el.innerHTML = '<li class="queue-empty">— nothing queued —</li>';
       return;
     }
-    el.innerHTML = state.queue.map((s, i) => `
-      <li class="${i === state.idx ? 'current' : ''}">
-        <span class="qidx">${String(i + 1).padStart(2, '0')}</span>
-        <span class="qtitle">${esc(s.title || s.query || '?')}</span>
-        <span class="qartist">${esc(s.artist || '')}</span>
-      </li>
-    `).join('');
+    el.innerHTML = state.queue.map((s, i) => {
+      const r = state.reactions.get(s.videoId) || 0;
+      return `
+        <li class="${i === state.idx ? 'current' : ''}">
+          <span class="qidx">${String(i + 1).padStart(2, '0')}</span>
+          <span class="qtitle">${esc(s.title || s.query || '?')}</span>
+          <span class="qartist">${esc(s.artist || '')}</span>
+          <span class="qreact">
+            <button class="rx-btn ${r === 1 ? 'on' : ''}" data-vid="${esc(s.videoId)}" data-rxn="1" title="Like" type="button">♥</button>
+            <button class="rx-btn ${r === -1 ? 'on bad' : ''}" data-vid="${esc(s.videoId)}" data-rxn="-1" title="Dislike — never play again" type="button">⊘</button>
+          </span>
+        </li>
+      `;
+    }).join('');
+  }
+
+  // Event delegation: one listener for all thumb buttons (rerender swaps DOM).
+  $('queue').addEventListener('click', (e) => {
+    const btn = e.target.closest('.rx-btn');
+    if (!btn) return;
+    const videoId = btn.dataset.vid;
+    const clicked = Number(btn.dataset.rxn);
+    if (!videoId || !clicked) return;
+    const current = state.reactions.get(videoId) || 0;
+    // Re-clicking the same reaction clears it; otherwise sets to clicked.
+    const next = current === clicked ? 0 : clicked;
+    handleReaction(videoId, next);
+  });
+
+  async function handleReaction(videoId, reaction) {
+    if (reaction === 0) state.reactions.delete(videoId);
+    else state.reactions.set(videoId, reaction);
+
+    // Find queue item (for title/artist payload + possible removal).
+    const item = state.queue.find((s) => s.videoId === videoId);
+    try {
+      await fetch('/api/reactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          videoId,
+          reaction,
+          title: item?.title || null,
+          artist: item?.artist || null,
+        }),
+      });
+    } catch (err) {
+      console.warn('[reaction]', err);
+    }
+
+    if (reaction === -1) {
+      applyDislikeToQueue(videoId);
+    } else {
+      renderQueue();
+    }
+  }
+
+  function applyDislikeToQueue(videoId) {
+    const removeIdx = state.queue.findIndex((s) => s.videoId === videoId);
+    if (removeIdx < 0) { renderQueue(); return; }
+    state.queue.splice(removeIdx, 1);
+
+    if (state.queue.length === 0) {
+      state.idx = 0;
+      state.player?.stopVideo?.();
+      stopProgress();
+      resetProgress();
+      setNowState('IDLE');
+      setBars(false);
+      setAir(false);
+      renderQueue();
+      return;
+    }
+
+    if (removeIdx === state.idx) {
+      // Was the currently-playing track. After splice, state.queue[state.idx]
+      // is what was the next track — load it. If we removed the last item,
+      // fall back to playNext's end-of-queue handling.
+      if (state.idx >= state.queue.length) {
+        state.idx = state.queue.length; // out of bounds → playNext catches
+        playNext();
+      } else {
+        playCurrent();
+      }
+    } else if (removeIdx < state.idx) {
+      state.idx--;
+      renderQueue();
+    } else {
+      renderQueue();
+    }
   }
 
   /* First user gesture unlocks autoplay. Browsers block media on cold load
@@ -271,9 +367,18 @@
   let autoShowApplied = false;
 
   function startAutoShowFetch() {
+    // Guests can't auto-DJ. Show a welcome state instead.
+    if (!state.user || state.user.isGuest) {
+      setNowState('IDLE');
+      setDjText(state.user?.isGuest
+        ? `Welcome — you have ${state.user.chatsLimit - state.user.chatsUsed} trial chats. Tell me what to play.`
+        : 'Tell me what to play. A mood, a scene, a song to seed from — anything.',
+        false);
+      return;
+    }
     setNowState('TUNING IN…');
     setDjText('…', false);
-    autoShowPromise = fetch('/api/auto-show', { method: 'POST' })
+    autoShowPromise = fetch('/api/auto-show', { method: 'POST', credentials: 'same-origin' })
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -305,7 +410,250 @@
     await loadShow(data);
   }
 
-  startAutoShowFetch();
+  // Bootstrap: resolve auth before deciding whether to auto-tune-in.
+  bootstrap();
+
+  async function bootstrap() {
+    try {
+      const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      const data = await res.json();
+      state.user = data.user;
+      renderAuthPill(state.user);
+    } catch (err) {
+      console.warn('[auth/me]', err);
+    }
+    if (state.user) {
+      try {
+        const res = await fetch('/api/reactions', { credentials: 'same-origin' });
+        if (res.ok) {
+          const { reactions } = await res.json();
+          state.reactions = new Map(reactions.map((r) => [r.video_id, r.reaction]));
+        }
+      } catch (err) {
+        console.warn('[reactions]', err);
+      }
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('login') === '1') {
+      openLoginModal({
+        errorCode: params.get('error') || null,
+      });
+    }
+    if (params.get('settings') === '1') {
+      const flash = params.get('calendar') === 'ok' ? 'calendar_ok' : null;
+      openSettingsModal({ flash });
+    }
+    if (params.has('login') || params.has('settings') || params.has('error') || params.has('calendar')) {
+      const url = new URL(window.location.href);
+      ['login', 'settings', 'error', 'calendar'].forEach((k) => url.searchParams.delete(k));
+      window.history.replaceState({}, '', url.toString());
+    }
+    startAutoShowFetch();
+  }
+
+  /* ───── auth pill + login modal ─────────────────────────────────────── */
+  function renderAuthPill(user) {
+    const pill = $('authPill');
+    const name = $('authName');
+    const btn = $('authBtn');
+    const settingsBtn = $('settingsBtn');
+    pill.hidden = false;
+    if (!user || user.isGuest) {
+      const label = user
+        ? `GUEST · ${user.chatsLimit - user.chatsUsed}/${user.chatsLimit} CHATS LEFT`
+        : 'GUEST';
+      name.textContent = label;
+      btn.textContent = 'SIGN UP';
+      btn.dataset.action = 'open';
+      settingsBtn.hidden = true;
+    } else {
+      name.textContent = (user.email || user.name || 'SIGNED IN').toUpperCase();
+      btn.textContent = 'SIGN OUT';
+      btn.dataset.action = 'signout';
+      settingsBtn.hidden = false;
+    }
+  }
+
+  $('authBtn').addEventListener('click', async () => {
+    const action = $('authBtn').dataset.action;
+    if (action === 'signout') {
+      await fetch('/api/auth/signout', { method: 'POST', credentials: 'same-origin' });
+      window.location.reload();
+      return;
+    }
+    openLoginModal();
+  });
+
+  const ERROR_MESSAGES = {
+    invalid_code: 'That invitation code is not valid.',
+    invalid_invite: 'That invitation code is not valid.',
+    invalid_state: 'Sign-in expired. Please try again.',
+    missing_params: 'Google did not return the expected parameters. Please retry.',
+  };
+
+  function openLoginModal({ lede, errorCode } = {}) {
+    const modal = $('loginModal');
+    const ledeEl = $('loginLede');
+    const errEl = $('loginError');
+    if (lede) ledeEl.textContent = lede;
+    if (errorCode) {
+      errEl.textContent = ERROR_MESSAGES[errorCode] || errorCode;
+      errEl.hidden = false;
+    } else {
+      errEl.hidden = true;
+    }
+    modal.hidden = false;
+    setTimeout(() => $('inviteCode').focus(), 50);
+  }
+
+  function closeLoginModal() {
+    $('loginModal').hidden = true;
+  }
+
+  $('loginClose').addEventListener('click', closeLoginModal);
+  $('loginModal').addEventListener('click', (e) => {
+    if (e.target.id === 'loginModal') closeLoginModal();
+  });
+
+  let codeValidateTimer = null;
+  $('inviteCode').addEventListener('input', () => {
+    const code = $('inviteCode').value.trim();
+    const statusEl = $('inviteStatus');
+    const btn = $('googleBtn');
+    statusEl.textContent = '';
+    statusEl.className = 'invite-status';
+    btn.disabled = true;
+    if (!code) return;
+    clearTimeout(codeValidateTimer);
+    codeValidateTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/auth/validate-code?code=${encodeURIComponent(code)}`);
+        if (res.ok) {
+          statusEl.textContent = '✓ valid';
+          statusEl.className = 'invite-status ok';
+          btn.disabled = false;
+        } else {
+          statusEl.textContent = '✗ invalid code';
+          statusEl.className = 'invite-status bad';
+        }
+      } catch {
+        statusEl.textContent = '✗ network error';
+        statusEl.className = 'invite-status bad';
+      }
+    }, 250);
+  });
+
+  $('loginForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const code = $('inviteCode').value.trim();
+    if (!code) return;
+    // Full-page navigation to the OAuth start endpoint.
+    window.location.href = `/api/auth/start?code=${encodeURIComponent(code)}`;
+  });
+
+  /* ───── settings drawer ─────────────────────────────────────────────── */
+  $('settingsBtn').addEventListener('click', () => openSettingsModal());
+  $('settingsClose').addEventListener('click', closeSettingsModal);
+  $('settingsModal').addEventListener('click', (e) => {
+    if (e.target.id === 'settingsModal') closeSettingsModal();
+  });
+
+  async function openSettingsModal({ flash } = {}) {
+    if (!state.user || state.user.isGuest) {
+      openLoginModal();
+      return;
+    }
+    $('settingsModal').hidden = false;
+    $('settingsError').hidden = true;
+    $('settingsOk').hidden = true;
+    if (flash === 'calendar_ok') {
+      $('settingsOk').textContent = 'Google Calendar connected.';
+      $('settingsOk').hidden = false;
+    }
+    try {
+      const [corpusRes, settingsRes] = await Promise.all([
+        fetch('/api/me/corpus', { credentials: 'same-origin' }),
+        fetch('/api/me/settings', { credentials: 'same-origin' }),
+      ]);
+      const corpus = await corpusRes.json();
+      const settings = await settingsRes.json();
+      $('setTaste').value = corpus.taste || '';
+      $('setRoutines').value = corpus.routines || '';
+      $('setMood').value = corpus.mood_rules || '';
+      $('setCity').value = settings.weather_city || '';
+      $('setVoice').value = settings.tts_reference_id || '';
+      renderCalendarStatus(settings);
+    } catch (err) {
+      $('settingsError').textContent = 'Failed to load settings: ' + err.message;
+      $('settingsError').hidden = false;
+    }
+  }
+
+  function closeSettingsModal() {
+    $('settingsModal').hidden = true;
+  }
+
+  function renderCalendarStatus({ calendar_connected, calendar_email }) {
+    const statusEl = $('calStatus');
+    const connectBtn = $('calConnectBtn');
+    const disconnectBtn = $('calDisconnectBtn');
+    if (calendar_connected) {
+      statusEl.textContent = calendar_email ? `Connected · ${calendar_email}` : 'Connected';
+      connectBtn.hidden = true;
+      disconnectBtn.hidden = false;
+    } else {
+      statusEl.textContent = 'Not connected';
+      connectBtn.hidden = false;
+      disconnectBtn.hidden = true;
+    }
+  }
+
+  $('calConnectBtn').addEventListener('click', () => {
+    window.location.href = '/api/me/calendar/start';
+  });
+
+  $('calDisconnectBtn').addEventListener('click', async () => {
+    await fetch('/api/me/calendar/disconnect', { method: 'POST', credentials: 'same-origin' });
+    renderCalendarStatus({ calendar_connected: false });
+  });
+
+  $('settingsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('settingsSaveBtn');
+    btn.disabled = true;
+    $('settingsError').hidden = true;
+    $('settingsOk').hidden = true;
+    try {
+      const corpusRes = await fetch('/api/me/corpus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          taste: $('setTaste').value,
+          routines: $('setRoutines').value,
+          mood_rules: $('setMood').value,
+        }),
+      });
+      if (!corpusRes.ok) throw new Error('corpus save failed');
+      const settingsRes = await fetch('/api/me/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          weather_city: $('setCity').value,
+          tts_reference_id: $('setVoice').value,
+        }),
+      });
+      if (!settingsRes.ok) throw new Error('settings save failed');
+      $('settingsOk').textContent = 'Saved.';
+      $('settingsOk').hidden = false;
+    } catch (err) {
+      $('settingsError').textContent = 'Save failed: ' + err.message;
+      $('settingsError').hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   function renderMeta(data) {
     const lines = [];
@@ -400,6 +748,12 @@
     if (state.prefetchInflight || state.pendingNext) return;
     if (!state.queue.length) return;
     if (remainingQueueSec() > PREFETCH_THRESHOLD_SEC) return;
+    // Auto-DJ continuation is signed-in-only. Guests get manually-seeded
+    // shows; the queue ends in IDLE and they can chat (or sign up).
+    if (!state.user || state.user.isGuest) {
+      renderPrefetchHint('AUTO-DJ · SIGN IN TO CONTINUE');
+      return;
+    }
     startPrefetch();
   }
 
@@ -408,9 +762,13 @@
     const token = ++state.prefetchToken;
     renderPrefetchHint('PREPARING NEXT SET…');
     try {
-      const res = await fetch('/api/auto-show', { method: 'POST' });
+      const res = await fetch('/api/auto-show', { method: 'POST', credentials: 'same-origin' });
       const data = await res.json();
       if (token !== state.prefetchToken) return; // invalidated
+      if (res.status === 401 || res.status === 403) {
+        renderPrefetchHint('AUTO-DJ · SIGN IN TO CONTINUE');
+        return;
+      }
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       if (!data.play?.length) {
         renderPrefetchHint('AUTO-DJ · NO PICKS');
@@ -447,6 +805,7 @@
     fetch('/api/played', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify({
         videoId: song.videoId,
         title: song.title,

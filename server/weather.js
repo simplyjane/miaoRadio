@@ -1,16 +1,18 @@
-let cached = null;
-let cachedAt = 0;
 const CACHE_MS = 10 * 60 * 1000;
+const cache = new Map(); // city → { at, value }
 
 export function weatherConfigured() {
   return Boolean(process.env.OPENWEATHER_API_KEY);
 }
 
-export async function getCurrentWeather() {
+export async function getCurrentWeather(cityOverride) {
   if (!weatherConfigured()) return null;
-  if (cached && Date.now() - cachedAt < CACHE_MS) return cached;
+  const city = (cityOverride || process.env.OPENWEATHER_CITY || 'Shanghai').trim();
+  if (!city) return null;
 
-  const city = process.env.OPENWEATHER_CITY || 'Shanghai';
+  const hit = cache.get(city);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
+
   const url = new URL('https://api.openweathermap.org/data/2.5/weather');
   url.searchParams.set('q', city);
   url.searchParams.set('appid', process.env.OPENWEATHER_API_KEY);
@@ -23,7 +25,7 @@ export async function getCurrentWeather() {
     throw new Error(`weather fetch failed: ${data.message || res.status}`);
   }
 
-  cached = {
+  const value = {
     city: data.name,
     temp: Math.round(data.main?.temp),
     feelsLike: Math.round(data.main?.feels_like),
@@ -31,8 +33,8 @@ export async function getCurrentWeather() {
     humidity: data.main?.humidity,
     wind: data.wind?.speed,
   };
-  cachedAt = Date.now();
-  return cached;
+  cache.set(city, { at: Date.now(), value });
+  return value;
 }
 
 export function formatWeatherForPrompt(w) {

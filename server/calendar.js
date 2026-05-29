@@ -1,16 +1,16 @@
-let cachedToken = null;
-let cachedExpiry = 0;
+import { getGoogleTokens, updateGoogleAccessToken } from './state.js';
 
 export function calendarConfigured() {
-  return Boolean(
-    process.env.GOOGLE_CLIENT_ID &&
-    process.env.GOOGLE_CLIENT_SECRET &&
-    process.env.GOOGLE_REFRESH_TOKEN,
-  );
+  // Auth is per-user now; we just need the OAuth client creds.
+  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 }
 
-async function getAccessToken() {
-  if (cachedToken && Date.now() < cachedExpiry - 60_000) return cachedToken;
+async function getAccessTokenForUser(userId) {
+  const row = getGoogleTokens(userId);
+  if (!row?.refresh_token) return null;
+  if (row.access_token && row.expires_at && Date.now() < row.expires_at - 60_000) {
+    return row.access_token;
+  }
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -18,24 +18,24 @@ async function getAccessToken() {
     body: new URLSearchParams({
       client_id: process.env.GOOGLE_CLIENT_ID,
       client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      refresh_token: row.refresh_token,
       grant_type: 'refresh_token',
     }),
   });
-
   const data = await res.json();
   if (!res.ok) {
     throw new Error(`refresh_token exchange failed: ${data.error_description || data.error || res.status}`);
   }
-  cachedToken = data.access_token;
-  cachedExpiry = Date.now() + (data.expires_in ?? 3600) * 1000;
-  return cachedToken;
+  const expiresAt = Date.now() + (data.expires_in ?? 3600) * 1000;
+  updateGoogleAccessToken(userId, { accessToken: data.access_token, expiresAt });
+  return data.access_token;
 }
 
-export async function getTodayEvents() {
-  if (!calendarConfigured()) return null;
+export async function getTodayEvents(userId) {
+  if (!calendarConfigured() || !userId) return null;
+  const token = await getAccessTokenForUser(userId);
+  if (!token) return null;
 
-  const token = await getAccessToken();
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
@@ -63,7 +63,7 @@ export async function getTodayEvents() {
 }
 
 export function formatEventsForPrompt(events) {
-  if (!events) return '(calendar not configured)';
+  if (!events) return '(calendar not connected)';
   if (!events.length) return '(no events today)';
   return events
     .map((e) => {

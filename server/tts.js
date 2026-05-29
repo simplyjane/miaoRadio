@@ -9,14 +9,14 @@ export function ttsConfigured() {
   return Boolean(process.env.FISH_AUDIO_API_KEY);
 }
 
-export async function synthesizeAndCache(text) {
+export async function synthesizeAndCache(text, { referenceId: refOverride } = {}) {
   if (!ttsConfigured()) return null;
   const trimmed = (text ?? '').trim();
   if (!trimmed) return null;
 
   await fs.mkdir(CACHE_DIR, { recursive: true });
 
-  const referenceId = process.env.FISH_AUDIO_REFERENCE_ID || '';
+  const referenceId = (refOverride || process.env.FISH_AUDIO_REFERENCE_ID || '').trim();
   const model = process.env.FISH_AUDIO_MODEL || 's1';
   const cacheKey = crypto
     .createHash('sha1')

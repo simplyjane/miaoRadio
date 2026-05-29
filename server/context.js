@@ -2,7 +2,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getTodayEvents, formatEventsForPrompt, calendarConfigured } from './calendar.js';
 import { getCurrentWeather, formatWeatherForPrompt, weatherConfigured } from './weather.js';
-import { getRecentMessages, getRecentPlays } from './state.js';
+import {
+  getRecentMessages,
+  getRecentPlays,
+  getCorpus,
+  getSettings,
+  getRecentByReaction,
+} from './state.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -17,23 +23,44 @@ async function safeRead(rel) {
 
 function detectLanguage(text) {
   if (!text) return null;
-  // Has any CJK character → Chinese; else → English
   return /[一-鿿㐀-䶿]/.test(text) ? 'Chinese' : 'English';
 }
 
-export async function buildSystemPrompt({ userMessage } = {}) {
-  const replyLang = detectLanguage(userMessage);
-  const [persona, taste, routines, moodRules, calendar, weather] = await Promise.all([
-    safeRead('prompts/dj-persona.md'),
+/**
+ * For signed-in users, taste/routines/mood come from their corpus row.
+ * For guests (no corpus row), fall back to the on-disk user/*.md files
+ * so the trial experience still has a personality.
+ */
+async function loadCorpus(userId) {
+  if (userId) {
+    const row = getCorpus(userId);
+    if (row) {
+      return { taste: row.taste, routines: row.routines, moodRules: row.mood_rules };
+    }
+  }
+  const [taste, routines, moodRules] = await Promise.all([
     safeRead('user/taste.md'),
     safeRead('user/routines.md'),
     safeRead('user/mood-rules.md'),
-    safeCalendar(),
-    safeWeather(),
   ]);
+  return { taste, routines, moodRules };
+}
 
-  const recentChats = formatRecentChats(getRecentMessages(10));
-  const recentPlays = formatRecentPlays(getRecentPlays(30));
+export async function buildSystemPrompt({ userMessage, userId } = {}) {
+  const replyLang = detectLanguage(userMessage);
+  const settings = userId ? getSettings(userId) : null;
+  const [persona, corpus, calendar, weather] = await Promise.all([
+    safeRead('prompts/dj-persona.md'),
+    loadCorpus(userId),
+    safeCalendar(userId),
+    safeWeather(settings?.weather_city),
+  ]);
+  const { taste, routines, moodRules } = corpus;
+
+  const recentChats = formatRecentChats(getRecentMessages(10, userId));
+  const recentPlays = formatRecentPlays(getRecentPlays(30, userId));
+  const liked = formatReactions(getRecentByReaction(userId, 1, 30));
+  const disliked = formatReactions(getRecentByReaction(userId, -1, 60));
 
   const now = new Date();
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -48,17 +75,24 @@ export async function buildSystemPrompt({ userMessage } = {}) {
     ? `# CRITICAL: REPLY LANGUAGE\nThe user's current message is in ${replyLang}. Reply in ${replyLang}. This overrides any pattern from RECENT CHATS.`
     : '';
 
-  return [
+  const stable = [
     persona,
-    langOverride,
     section('USER TASTE', taste),
     section('USER ROUTINES', routines),
     section('MOOD RULES', moodRules),
+  ].filter(Boolean).join('\n\n');
+
+  const volatile = [
+    langOverride,
     section("TODAY'S CALENDAR", calendar),
     section('ENVIRONMENT', env),
     section('RECENT CHATS', recentChats),
     section('RECENTLY PLAYED (avoid repeating these)', recentPlays),
+    section('LIKED — taste beacons. Use these to infer the user\'s direction (artists, era, mood). DO NOT re-recommend the literal tracks listed here; recommend OTHER songs in the same direction.', liked),
+    section('DISLIKED — NEVER recommend these tracks or near-identical covers.', disliked),
   ].filter(Boolean).join('\n\n');
+
+  return { stable, volatile };
 }
 
 function formatRecentChats(messages) {
@@ -75,10 +109,18 @@ function formatRecentPlays(plays) {
     .join('\n');
 }
 
-async function safeCalendar() {
-  if (!calendarConfigured()) return '';
+function formatReactions(rows) {
+  if (!rows.length) return '(none)';
+  return rows
+    .map((r) => `- ${r.title || '?'} — ${r.artist || '?'}`)
+    .join('\n');
+}
+
+async function safeCalendar(userId) {
+  if (!calendarConfigured() || !userId) return '';
   try {
-    const events = await getTodayEvents();
+    const events = await getTodayEvents(userId);
+    if (events == null) return ''; // user hasn't connected calendar
     return formatEventsForPrompt(events);
   } catch (e) {
     console.warn('[calendar]', e.message);
@@ -86,10 +128,10 @@ async function safeCalendar() {
   }
 }
 
-async function safeWeather() {
+async function safeWeather(cityOverride) {
   if (!weatherConfigured()) return null;
   try {
-    const w = await getCurrentWeather();
+    const w = await getCurrentWeather(cityOverride);
     return formatWeatherForPrompt(w);
   } catch (e) {
     console.warn('[weather]', e.message);

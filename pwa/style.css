@@ -432,7 +432,7 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
 }
 .queue li {
   display: grid;
-  grid-template-columns: 36px 1fr auto;
+  grid-template-columns: 36px 1fr auto auto;
   gap: 16px;
   align-items: center;
   padding: 11px 24px 11px 18px;
@@ -680,7 +680,7 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   .avatar { width: 52px; height: 52px; }
   .avatar svg { width: 34px; height: 34px; }
   .dj-text { font-size: 17px; }
-  .queue li { grid-template-columns: 24px 1fr auto; gap: 10px; padding: 10px 16px; }
+  .queue li { grid-template-columns: 24px 1fr auto auto; gap: 10px; padding: 10px 16px; }
   .queue li .qartist { font-size: 11px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
   .progress { padding: 8px 16px 14px; }
   .chat-form { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
@@ -688,3 +688,134 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
 
 /* ─── ERROR STATE ─────────────────────────────────────────────────────── */
 .dj-text.error { color: var(--accent); font-family: var(--font-mono); font-size: 13px; }
+
+/* ─── AUTH PILL ───────────────────────────────────────────────────────── */
+.auth-pill {
+  display: inline-flex; align-items: center; gap: 10px;
+  border: 1px solid var(--line);
+  padding: 4px 10px; height: 28px;
+  font-family: var(--font-mono); font-size: 11px;
+  background: var(--panel);
+}
+.auth-name { letter-spacing: .04em; color: var(--text); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auth-btn {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--text); font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: .08em; padding: 0; text-transform: uppercase;
+}
+.auth-btn:hover { color: var(--accent); }
+
+/* ─── LOGIN MODAL ─────────────────────────────────────────────────────── */
+.modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 20px;
+}
+.modal[hidden] { display: none; }
+.modal-card {
+  background: var(--panel); border: 1px solid var(--line);
+  width: 100%; max-width: 380px; padding: 24px;
+  font-family: var(--font-mono); color: var(--text);
+}
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.modal-title { font-size: 12px; letter-spacing: .12em; color: var(--text-faint); }
+.modal-close {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--text-faint); font-size: 22px; line-height: 1; padding: 0;
+}
+.modal-close:hover { color: var(--text); }
+.modal-lede { font-size: 13px; color: var(--text-faint); margin: 0 0 16px; line-height: 1.5; }
+.modal-error {
+  font-size: 12px; padding: 8px 10px; margin-bottom: 12px;
+  border: 1px solid var(--accent); color: var(--accent);
+  background: rgba(255,80,80,.06);
+}
+.modal-label { display: block; font-size: 10px; letter-spacing: .14em; color: var(--text-faint); margin-bottom: 6px; }
+#inviteCode {
+  width: 100%; padding: 10px 12px;
+  background: var(--bg); border: 1px solid var(--line);
+  color: var(--text); font-family: var(--font-mono); font-size: 14px;
+  letter-spacing: .08em; text-transform: uppercase;
+  box-sizing: border-box;
+}
+#inviteCode:focus { outline: none; border-color: var(--text); }
+.invite-status { font-size: 11px; min-height: 16px; margin: 6px 0 14px; letter-spacing: .04em; }
+.invite-status.ok { color: #5cb85c; }
+.invite-status.bad { color: var(--accent); }
+.google-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; padding: 11px;
+  background: var(--text); color: var(--bg);
+  border: none; font-family: var(--font-mono); font-size: 12px; letter-spacing: .1em;
+  cursor: pointer; font-weight: 600;
+}
+.google-btn:disabled { opacity: .35; cursor: not-allowed; }
+.google-btn:not(:disabled):hover { background: var(--accent); color: var(--bg); }
+
+/* ─── SETTINGS MODAL ──────────────────────────────────────────────────── */
+.settings-card { max-width: 520px; max-height: 92vh; overflow-y: auto; }
+.settings-section-title {
+  font-size: 10px; letter-spacing: .16em; color: var(--text-faint);
+  margin: 22px 0 10px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 500;
+}
+.settings-section-title:first-of-type { margin-top: 4px; }
+.settings-help {
+  font-size: 12px; color: var(--text-faint); margin: 0 0 14px; line-height: 1.5;
+}
+#settingsForm textarea,
+#settingsForm input[type="text"],
+#settingsForm input {
+  width: 100%; padding: 9px 11px; margin-bottom: 8px;
+  background: var(--bg); border: 1px solid var(--line);
+  color: var(--text); font-family: var(--font-mono); font-size: 13px;
+  box-sizing: border-box; resize: vertical;
+}
+#settingsForm textarea { line-height: 1.5; min-height: 80px; }
+#settingsForm input:focus, #settingsForm textarea:focus {
+  outline: none; border-color: var(--text);
+}
+.calendar-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; margin-bottom: 4px;
+}
+.calendar-status { font-size: 12px; color: var(--text-faint); flex: 1; }
+.calendar-btn {
+  background: transparent; border: 1px solid var(--line);
+  color: var(--text); font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: .08em; padding: 6px 12px; cursor: pointer;
+}
+.calendar-btn:hover { border-color: var(--text); }
+.settings-actions { margin-top: 18px; }
+.modal-success {
+  font-size: 12px; padding: 8px 10px; margin-bottom: 12px;
+  border: 1px solid #5cb85c; color: #5cb85c; background: rgba(92,184,92,.06);
+}
+
+/* ─── REACTION BUTTONS ────────────────────────────────────────────────── */
+.queue li { position: relative; }
+.qreact {
+  display: inline-flex; gap: 4px; align-items: center;
+  margin-left: auto;
+}
+.rx-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-faint);
+  width: 26px; height: 24px;
+  font-size: 12px; line-height: 1;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color .1s, border-color .1s, background .1s;
+}
+.rx-btn:hover { color: var(--text); border-color: var(--text); }
+.rx-btn.on { color: var(--accent); border-color: var(--accent); }
+.rx-btn.on.bad { color: #ff5050; border-color: #ff5050; background: rgba(255,80,80,.08); }
+@media (max-width: 600px) {
+  .rx-btn { width: 30px; height: 28px; font-size: 13px; }
+  .queue li .qartist { display: none; }
+}

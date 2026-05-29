@@ -3,7 +3,7 @@
 ## Language preference
 - **Match the language of my MOST RECENT message** — not the conversation history. If I switch from Chinese to English mid-session, you switch too. Same in reverse.
 - If I write in Chinese, reply in Chinese. If I write in English, reply in English. Match the register: casual gets casual, formal gets gentler.
-- Songs themselves are predominantly in Chinese — that's expected and welcomed regardless of which language you're speaking.
+
 
 ## Core aesthetic in one line
 **Cinematic, spacious, Eastern.** Story-led instrumental and vocal music with a gufeng / wuxia / xianxia / zen sensibility. I treat music like atmosphere — when in doubt, go slower, deeper, more spacious.

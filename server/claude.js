@@ -1,43 +1,92 @@
-import { spawn } from 'node:child_process';
+import Anthropic from '@anthropic-ai/sdk';
 
-export function callClaude({ system, user, timeoutMs = 60_000 }) {
-  return new Promise((resolve, reject) => {
-    const model = process.env.CLAUDE_MODEL || 'opus';
-    const args = ['--print', '--output-format', 'json', '--model', model];
-    if (system) args.push('--system-prompt', system);
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
-    const proc = spawn('claude', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+// Legacy short names from when this server shelled out to the `claude` CLI.
+// Map them to current API model IDs so existing .env values keep working.
+const MODEL_ALIASES = {
+  opus: 'claude-opus-4-7',
+  sonnet: 'claude-sonnet-4-6',
+  haiku: 'claude-haiku-4-5-20251001',
+};
 
-    let stdout = '';
-    let stderr = '';
-    const timer = setTimeout(() => {
-      proc.kill('SIGKILL');
-      reject(new Error(`claude subprocess timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
+function resolveModel() {
+  const raw = (process.env.CLAUDE_MODEL || '').trim();
+  if (!raw) return DEFAULT_MODEL;
+  return MODEL_ALIASES[raw.toLowerCase()] || raw;
+}
 
-    proc.stdout.on('data', (d) => (stdout += d));
-    proc.stderr.on('data', (d) => (stderr += d));
+let client = null;
+function getClient() {
+  if (client) return client;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set');
+  client = new Anthropic({ apiKey });
+  return client;
+}
 
-    proc.on('error', (err) => {
-      clearTimeout(timer);
-      reject(new Error(`failed to spawn claude: ${err.message}`));
+/**
+ * Call Claude. Returns a wrapper compatible with the previous CLI-based
+ * shape: { result, is_error, subtype, usage?, model?, stop_reason? }.
+ *
+ * `system` may be a plain string OR { stable, volatile } — the latter form
+ * sends two system blocks with cache_control on the stable one, which is
+ * cheap for the recurring DJ turns where persona+taste don't change.
+ */
+export async function callClaude({ system, user, timeoutMs = 60_000 }) {
+  const model = resolveModel();
+  const maxTokens = Number(process.env.CLAUDE_MAX_TOKENS) || 1024;
+
+  try {
+    const response = await getClient().messages.create(
+      {
+        model,
+        max_tokens: maxTokens,
+        system: toSystemBlocks(system),
+        messages: [{ role: 'user', content: user ?? '' }],
+      },
+      { timeout: timeoutMs },
+    );
+
+    const text = response.content
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text)
+      .join('');
+
+    return {
+      is_error: false,
+      subtype: 'success',
+      result: text,
+      usage: response.usage,
+      model: response.model,
+      stop_reason: response.stop_reason,
+    };
+  } catch (err) {
+    return {
+      is_error: true,
+      subtype: 'error',
+      result: err?.message || String(err),
+    };
+  }
+}
+
+function toSystemBlocks(system) {
+  if (!system) return undefined;
+  if (typeof system === 'string') {
+    return [{ type: 'text', text: system }];
+  }
+  const blocks = [];
+  if (system.stable) {
+    blocks.push({
+      type: 'text',
+      text: system.stable,
+      cache_control: { type: 'ephemeral' },
     });
-
-    proc.on('close', (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        return reject(new Error(`claude exited ${code}: ${stderr || stdout}`));
-      }
-      try {
-        resolve(JSON.parse(stdout));
-      } catch {
-        reject(new Error(`could not parse claude json output: ${stdout.slice(0, 300)}`));
-      }
-    });
-
-    proc.stdin.write(user ?? '');
-    proc.stdin.end();
-  });
+  }
+  if (system.volatile) {
+    blocks.push({ type: 'text', text: system.volatile });
+  }
+  return blocks.length ? blocks : undefined;
 }
 
 export function parseDJResponse(text) {
