@@ -46,6 +46,7 @@
       settings: 'SETTINGS', guest: 'GUEST',
       guest_chats_left: 'GUEST · {remaining}/{limit} CHATS LEFT',
       signed_in: 'SIGNED IN',
+      signed_in_as: 'SIGNED IN AS',
       air_on: 'ON AIR', air_off: 'OFF AIR',
       idle: 'IDLE', playing: 'PLAYING', paused: 'PAUSED', buffering: 'BUFFERING',
       thinking: 'THINKING', tuning_in: 'TUNING IN…', dj_on_air: 'DJ ON AIR',
@@ -110,6 +111,7 @@
       settings: 'PARAMÈTRES', guest: 'INVITÉ',
       guest_chats_left: 'INVITÉ · {remaining}/{limit} ESSAIS',
       signed_in: 'CONNECTÉ',
+      signed_in_as: 'CONNECTÉ EN TANT QUE',
       air_on: 'EN ONDES', air_off: 'HORS ONDES',
       idle: 'INACTIF', playing: 'LECTURE', paused: 'PAUSE', buffering: 'CHARGEMENT',
       thinking: 'RÉFLEXION', tuning_in: 'RECHERCHE…', dj_on_air: 'DJ EN ONDES',
@@ -736,23 +738,29 @@
       name.textContent = label;
       btn.textContent = t('sign_up');
       btn.dataset.action = 'open';
+      btn.hidden = false;
       settingsBtn.hidden = true;
     } else {
+      // Signed-in: topbar shows identity + SETTINGS only. Sign-out lives
+      // inside the settings drawer as a deliberate two-step action.
       name.textContent = (user.email || user.name || t('signed_in')).toUpperCase();
-      btn.textContent = t('sign_out');
-      btn.dataset.action = 'signout';
+      btn.hidden = true;
+      btn.dataset.action = '';
       settingsBtn.hidden = false;
     }
   }
 
-  $('authBtn').addEventListener('click', async () => {
-    const action = $('authBtn').dataset.action;
-    if (action === 'signout') {
-      await fetch('/api/auth/signout', { method: 'POST', credentials: 'same-origin' });
-      window.location.reload();
-      return;
-    }
+  $('authBtn').addEventListener('click', () => {
+    // The topbar button is now signup-only (sign-out moved into settings).
     openLoginModal();
+  });
+
+  $('accountSignOut').addEventListener('click', async () => {
+    const btn = $('accountSignOut');
+    btn.disabled = true;
+    btn.textContent = '…';
+    await fetch('/api/auth/signout', { method: 'POST', credentials: 'same-origin' });
+    window.location.reload();
   });
 
   const ERROR_KEYS = {
@@ -837,6 +845,7 @@
     $('settingsModal').hidden = false;
     $('settingsError').hidden = true;
     $('settingsOk').hidden = true;
+    $('accountEmail').textContent = state.user.email || state.user.name || '—';
     if (flash === 'calendar_ok') {
       $('settingsOk').textContent = t('calendar_connected_msg');
       $('settingsOk').hidden = false;

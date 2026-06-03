@@ -148,6 +148,15 @@
         <span class="modal-title" data-i18n="settings">SETTINGS</span>
         <button class="modal-close" id="settingsClose" type="button" aria-label="Close">×</button>
       </header>
+      <div class="account-card" id="accountCard">
+        <span class="account-dot" aria-hidden="true"></span>
+        <div class="account-info">
+          <span class="account-label" data-i18n="signed_in_as">SIGNED IN AS</span>
+          <span class="account-email" id="accountEmail">—</span>
+        </div>
+        <button type="button" class="account-out" id="accountSignOut" data-i18n="sign_out">SIGN OUT</button>
+      </div>
+
       <div class="modal-error" id="settingsError" hidden></div>
       <div class="modal-success" id="settingsOk" hidden></div>
 

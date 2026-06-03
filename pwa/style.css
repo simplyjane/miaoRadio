@@ -951,3 +951,87 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   transition: background .2s ease, color .2s ease;
 }
 .google-btn.saved-flash:hover { background: #5cb85c; color: #fff; }
+
+/* ─── ACCOUNT CARD (top of settings modal) ────────────────────────────
+   Broadcast-station identity strip: pulsing live-dot, identity in mono,
+   sign-out as a ghost action that flares red on hover so it feels like a
+   considered exit, not an accidental click. */
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  margin: 0 0 18px;
+  border: 1px solid var(--line-bright);
+  background:
+    linear-gradient(currentColor, currentColor) 0 0 / 4px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 0 / 1px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 100% 100% / 4px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) 100% 100% / 1px 4px no-repeat,
+    var(--bg);
+  color: var(--text-faint);
+  position: relative;
+}
+.account-dot {
+  width: 8px; height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px var(--accent-dim);
+  flex-shrink: 0;
+  animation: account-pulse 2s ease-in-out infinite;
+}
+@keyframes account-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 4px var(--accent-dim); }
+  50%      { opacity: 0.55; box-shadow: 0 0 0 7px transparent; }
+}
+.account-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.account-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.account-email {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-out {
+  background: transparent;
+  border: 1px solid var(--line-bright);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  padding: 7px 12px;
+  cursor: pointer;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  transition: color .12s ease, border-color .12s ease, background .12s ease;
+}
+.account-out:hover:not(:disabled) {
+  color: #ff5050;
+  border-color: #ff5050;
+  background: rgba(255, 80, 80, 0.08);
+}
+.account-out:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+.account-out:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (max-width: 480px) {
+  .account-card { padding: 10px 12px; gap: 10px; }
+  .account-email { font-size: 12px; }
+  .account-out { padding: 6px 10px; font-size: 9px; }
+}
