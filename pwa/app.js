@@ -736,14 +736,16 @@
         ? t('guest_chats_left', { remaining: user.chatsLimit - user.chatsUsed, limit: user.chatsLimit })
         : t('guest');
       name.textContent = label;
+      name.hidden = false;
       btn.textContent = t('sign_up');
       btn.dataset.action = 'open';
       btn.hidden = false;
       settingsBtn.hidden = true;
     } else {
-      // Signed-in: topbar shows identity + SETTINGS only. Sign-out lives
-      // inside the settings drawer as a deliberate two-step action.
-      name.textContent = (user.email || user.name || t('signed_in')).toUpperCase();
+      // Signed-in: topbar is just the SETTINGS button. Identity + sign-out
+      // live inside the settings drawer.
+      name.textContent = '';
+      name.hidden = true;
       btn.hidden = true;
       btn.dataset.action = '';
       settingsBtn.hidden = false;
