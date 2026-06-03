@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { callClaude, parseDJResponse } from './claude.js';
 import { buildSystemPrompt } from './context.js';
 import { searchSongs } from './ytmusic.js';
@@ -15,6 +16,22 @@ import {
 // literal track from auto-picks for this long after a like — the DJ should
 // be recommending similar tracks, not the same one.
 const LIKE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+// Pending TTS jobs that the client can pick up via /api/patter/:id while the
+// queue is already showing. Each entry holds the synth promise + a creation
+// timestamp; we sweep entries older than 5 min so the Map can't grow.
+const PATTER_TTL_MS = 5 * 60 * 1000;
+const pendingPatter = new Map(); // id → { promise, createdAt }
+setInterval(() => {
+  const cutoff = Date.now() - PATTER_TTL_MS;
+  for (const [id, item] of pendingPatter) {
+    if (item.createdAt < cutoff) pendingPatter.delete(id);
+  }
+}, 60_000).unref?.();
+
+export function getPendingPatter(id) {
+  return pendingPatter.get(id);
+}
 
 export async function handleChat(message, user) {
   recordMessage('user', message, user.id);
@@ -50,35 +67,44 @@ async function runDJ({ trigger, langHint, user }) {
   const dj = parseDJResponse(wrapper.result ?? '');
   const tParse = Date.now();
 
-  // Track per-step timing for the parallel block so we can see which side
-  // (YT search vs Fish TTS) is the slow one.
-  const ytStart = Date.now();
-  let ytDone = 0;
+  // Kick off TTS in parallel with YT — but DON'T block the response on it.
+  // The client picks up the patter URL through /api/patter/:id once it's
+  // ready, while the queue is already on screen.
   const ttsStart = Date.now();
   let ttsDone = 0;
+  const patterPromise = synthesizeAndCache(dj.say, {
+    referenceId: getSettings(user.id)?.tts_reference_id || undefined,
+  }).then((r) => { ttsDone = Date.now(); return r; }).catch((e) => {
+    console.warn('[tts]', e.message);
+    ttsDone = Date.now();
+    return null;
+  });
+  const sayAudioPendingId = dj.say
+    ? crypto.randomBytes(8).toString('hex')
+    : null;
+  if (sayAudioPendingId) {
+    pendingPatter.set(sayAudioPendingId, {
+      promise: patterPromise,
+      createdAt: Date.now(),
+    });
+  }
 
-  const [enriched, sayAudioUrl] = await Promise.all([
-    Promise.all(
-      dj.play.map(async (item) => {
-        const query = typeof item === 'string' ? item : item?.query;
-        if (!query) return { query: null, error: 'empty query' };
-        try {
-          const hits = await searchSongs(query, 1);
-          if (!hits.length) return { query, error: 'not found' };
-          return { query, ...hits[0] };
-        } catch (e) {
-          return { query, error: e.message };
-        }
-      }),
-    ).then((r) => { ytDone = Date.now(); return r; }),
-    synthesizeAndCache(dj.say, {
-      referenceId: getSettings(user.id)?.tts_reference_id || undefined,
-    }).then((r) => { ttsDone = Date.now(); return r; }).catch((e) => {
-      console.warn('[tts]', e.message);
-      ttsDone = Date.now();
-      return null;
+  // YT searches are the only thing the response actually waits on.
+  const ytStart = Date.now();
+  const enriched = await Promise.all(
+    dj.play.map(async (item) => {
+      const query = typeof item === 'string' ? item : item?.query;
+      if (!query) return { query: null, error: 'empty query' };
+      try {
+        const hits = await searchSongs(query, 1);
+        if (!hits.length) return { query, error: 'not found' };
+        return { query, ...hits[0] };
+      } catch (e) {
+        return { query, error: e.message };
+      }
     }),
-  ]);
+  );
+  const ytDone = Date.now();
   const tEnrich = Date.now();
 
   const usage = wrapper.usage || {};
@@ -111,7 +137,8 @@ async function runDJ({ trigger, langHint, user }) {
 
   return {
     say: dj.say,
-    sayAudioUrl,
+    sayAudioUrl: null,           // deferred — client picks up via /api/patter/:id
+    sayAudioPendingId,
     play: filtered,
     misses: [
       ...enriched.filter((x) => x.error),

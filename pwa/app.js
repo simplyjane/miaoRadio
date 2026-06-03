@@ -570,6 +570,23 @@
   document.addEventListener('pointerdown', onFirstGesture, true);
   document.addEventListener('keydown', onFirstGesture, true);
 
+  // The server returns the queue as soon as Claude+YT are done, BEFORE TTS
+  // finishes. sayAudioUrl is then null and we get a sayAudioPendingId we use
+  // to poll a short-lived endpoint for the URL.
+  function fetchPatterUrl(data) {
+    if (data?.sayAudioUrl) return Promise.resolve(data.sayAudioUrl);
+    if (!data?.sayAudioPendingId) return Promise.resolve(null);
+    return fetch(`/api/patter/${data.sayAudioPendingId}`, { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j?.sayAudioUrl || null)
+      .catch(() => null);
+  }
+
+  // How long the client waits for patter before giving up and just starting
+  // the music. On warm prod this is plenty; on cold the patter is dropped
+  // for this turn so the queue isn't held hostage.
+  const PATTER_WAIT_MS = 6000;
+
   async function loadShow(data) {
     setDjText(data.say || '(silent)', false);
     state.queue = data.play || [];
@@ -577,20 +594,29 @@
     renderQueue();
     renderMeta(data);
 
+    const patterPromise = fetchPatterUrl(data);
+
     if (!userActivated) {
-      // Cold load — don't attempt audio yet. Stash patter, load the video into
-      // the iframe (which shows the thumbnail), and prompt for any interaction.
-      pendingPatterUrl = data.sayAudioUrl || null;
+      // Cold load — don't attempt audio yet. Stash patter URL when it
+      // arrives (we'll play it after the first user gesture).
+      patterPromise.then((url) => { if (url) pendingPatterUrl = url; });
       if (state.queue.length) playCurrent();
       setNowState(t('tap_to_start'));
       setAir(false);
       return;
     }
 
-    if (data.sayAudioUrl) {
+    // Race the patter against a budget. If TTS lands quickly, we get the
+    // full DJ-talks-then-music experience. If it's slow, we skip the patter
+    // for this set so the user hears music sooner.
+    const patterUrl = await Promise.race([
+      patterPromise,
+      new Promise((resolve) => setTimeout(() => resolve(null), PATTER_WAIT_MS)),
+    ]);
+    if (patterUrl) {
       setNowState(t('dj_on_air'));
       setDjBars(true);
-      await playDjPatter(data.sayAudioUrl);
+      await playDjPatter(patterUrl);
       setDjBars(false);
     }
     if (state.queue.length) playCurrent();
@@ -1000,11 +1026,18 @@
     }
     setDjText(next.say || '(silent)', false);
     renderMeta(next);
-    if (next.sayAudioUrl) {
+    // Prefetch began ~5 min ago; TTS has almost certainly finished by now.
+    // Wait briefly if not, then splice in regardless.
+    const url = next.sayAudioUrl
+      || (next.patterPromise ? await Promise.race([
+        next.patterPromise,
+        new Promise((r) => setTimeout(() => r(null), 2000)),
+      ]) : null);
+    if (url) {
       setNowState(t('dj_on_air'));
       setAir(true);
       setDjBars(true);
-      await playDjPatter(next.sayAudioUrl);
+      await playDjPatter(url);
       setDjBars(false);
     }
     state.queue = state.queue.concat(next.play);
@@ -1050,6 +1083,9 @@
         renderPrefetchHint(t('auto_no_picks'));
         return;
       }
+      // Kick off patter fetch in background — by the time the user-visible
+      // queue actually drains, the TTS URL is likely already resolved.
+      data.patterPromise = fetchPatterUrl(data);
       state.pendingNext = data;
       renderPrefetchHint(t(data.play.length === 1 ? 'next_set_ready_one' : 'next_set_ready_many', { n: data.play.length }));
       // If the queue already ended while we were fetching, splice in now.

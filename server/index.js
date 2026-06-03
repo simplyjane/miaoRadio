@@ -1,7 +1,8 @@
 import express from 'express';
 import path from 'node:path';
-import { handleChat, handleAutoShow } from './router.js';
+import { handleChat, handleAutoShow, getPendingPatter } from './router.js';
 import { searchSongs } from './ytmusic.js';
+import { synthesizeAndCache } from './tts.js';
 import { lookupCityForIp } from './geo.js';
 import {
   recordPlay,
@@ -269,6 +270,18 @@ app.post('/api/reactions', (req, res) => {
   res.json({ ok: true });
 });
 
+// Long-poll for a deferred patter MP3. The client fires this immediately
+// after /api/chat returns; the response holds open until TTS resolves
+// (typically 0.5–5s on warm, much longer on cold) or the timeout trips.
+app.get('/api/patter/:id', async (req, res) => {
+  const item = getPendingPatter(req.params.id);
+  if (!item) return res.status(404).json({ error: 'expired_or_unknown' });
+  const timeout = new Promise((resolve) => setTimeout(() => resolve('__timeout__'), 45_000));
+  const winner = await Promise.race([item.promise, timeout]);
+  if (winner === '__timeout__') return res.status(504).json({ error: 'timeout' });
+  res.json({ sayAudioUrl: winner || null });
+});
+
 app.post('/api/played', (req, res) => {
   const user = resolveUser(req, res);
   if (!user) return res.status(401).json({ error: 'no_session' });
@@ -300,12 +313,29 @@ app.listen(PORT, () => {
 
 async function warmup() {
   const t0 = Date.now();
-  try {
-    // Initializes Innertube (downloads YT player JS, sets up signing).
-    // Subsequent searchSongs() calls reuse the cached client.
-    const r = await searchSongs('warmup', 1);
-    console.log(`[warmup] yt ready in ${Date.now() - t0}ms (sample: ${r[0]?.title || 'n/a'})`);
-  } catch (e) {
-    console.warn(`[warmup] yt failed: ${e.message}`);
-  }
+  // Run YT and TTS warmups in parallel — both have ~70s cold-start penalties
+  // we want to eat at boot rather than on the user's first chat.
+  await Promise.allSettled([
+    (async () => {
+      const start = Date.now();
+      try {
+        const r = await searchSongs('warmup', 1);
+        console.log(`[warmup] yt ready in ${Date.now() - start}ms (sample: ${r[0]?.title || 'n/a'})`);
+      } catch (e) {
+        console.warn(`[warmup] yt failed: ${e.message}`);
+      }
+    })(),
+    (async () => {
+      const start = Date.now();
+      try {
+        // Cheap probe ("·") so the on-disk cache picks it up too. Trivial cost
+        // (~$0.001 per boot, deploys happen rarely).
+        await synthesizeAndCache('·');
+        console.log(`[warmup] tts ready in ${Date.now() - start}ms`);
+      } catch (e) {
+        console.warn(`[warmup] tts failed: ${e.message}`);
+      }
+    })(),
+  ]);
+  console.log(`[warmup] total ${Date.now() - t0}ms`);
 }
