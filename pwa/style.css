@@ -818,7 +818,57 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   letter-spacing: .08em; padding: 6px 12px; cursor: pointer;
 }
 .calendar-btn:hover { border-color: var(--text); }
-.settings-actions { margin-top: 18px; }
+.settings-actions { margin-top: 18px; text-align: center; }
+
+/* Printer-style status ticker that prints below the SAVE button after a
+   successful save. Stays in the same visual neighborhood as the action
+   the user just took, so mobile users see confirmation without scrolling. */
+.save-ticker {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px 7px 10px;
+  border: 1px dashed var(--accent);
+  background: var(--accent-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+  text-transform: uppercase;
+  position: relative;
+}
+.save-ticker[hidden] { display: none; }
+.save-ticker .tk-dot {
+  width: 7px; height: 7px;
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--accent-dim);
+  animation: tk-pulse 0.9s ease-in-out infinite;
+}
+.save-ticker .tk-label { font-weight: 500; }
+.save-ticker .tk-time {
+  color: var(--text-dim);
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+  padding-left: 4px;
+  border-left: 1px dotted var(--line-bright);
+}
+.save-ticker.ticking { animation: tk-print .55s steps(24, end); }
+@keyframes tk-print {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+@keyframes tk-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+/* Fade the whole ticker out near the end of its lifetime so it doesn't
+   pop off. The 2.4s in JS gives this fade ~400ms of room. */
+.save-ticker.ticking { animation: tk-print .55s steps(24, end), tk-out .35s ease-in 2.05s forwards; }
+@keyframes tk-out {
+  to { opacity: 0; transform: translateY(-2px); }
+}
 .modal-success {
   font-size: 12px; padding: 8px 10px; margin-bottom: 12px;
   border: 1px solid #5cb85c; color: #5cb85c; background: rgba(92,184,92,.06);

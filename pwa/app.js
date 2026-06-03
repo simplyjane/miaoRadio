@@ -900,17 +900,34 @@
       });
       if (!settingsRes.ok) throw new Error('settings save failed');
       // Visible success right at the cursor: the button itself flashes a
-      // checkmark for 2s, then returns to "SAVE".
+      // checkmark for 2s, and a printer-ticker style status line types
+      // itself out below the button so mobile users see confirmation
+      // without scrolling.
       btn.textContent = '✓ ' + t('saved').replace(/\.$/, '').toUpperCase();
       btn.classList.add('saved-flash');
       $('settingsOk').textContent = t('saved');
       $('settingsOk').hidden = false;
+      const ticker = $('saveTicker');
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      const stamp = `${hh}:${mm}:${ss}`;
+      ticker.innerHTML = `<span class="tk-dot"></span><span class="tk-label">${esc(t('saved').replace(/\.$/, '').toUpperCase())}</span><span class="tk-time">${stamp}</span>`;
+      ticker.hidden = false;
+      // Force restart of the print-out animation if a previous save's
+      // animation hadn't finished.
+      ticker.classList.remove('ticking');
+      void ticker.offsetWidth;
+      ticker.classList.add('ticking');
       savedFlashTimer = setTimeout(() => {
         btn.textContent = originalLabel;
         btn.classList.remove('saved-flash');
         $('settingsOk').hidden = true;
+        ticker.hidden = true;
+        ticker.classList.remove('ticking');
         savedFlashTimer = null;
-      }, 2000);
+      }, 2400);
     } catch (err) {
       btn.textContent = originalLabel;
       $('settingsError').textContent = t('save_failed', { err: err.message });
