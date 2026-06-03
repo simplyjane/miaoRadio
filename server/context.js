@@ -46,7 +46,7 @@ async function loadCorpus(userId) {
   return { taste, routines, moodRules };
 }
 
-export async function buildSystemPrompt({ userMessage, userId } = {}) {
+export async function buildSystemPrompt({ userMessage, userId, userName } = {}) {
   const replyLang = detectLanguage(userMessage);
   const settings = userId ? getSettings(userId) : null;
   const [persona, corpus, calendar, weather] = await Promise.all([
@@ -56,6 +56,10 @@ export async function buildSystemPrompt({ userMessage, userId } = {}) {
     safeWeather(settings?.weather_city),
   ]);
   const { taste, routines, moodRules } = corpus;
+
+  // Pull the user's first name from Google profile data when available, so
+  // the DJ can use it naturally for warmth. Guests have no name.
+  const firstName = userName ? String(userName).trim().split(/\s+/)[0] : null;
 
   const recentChats = formatRecentChats(getRecentMessages(10, userId));
   const recentPlays = formatRecentPlays(getRecentPlays(30, userId));
@@ -75,8 +79,20 @@ export async function buildSystemPrompt({ userMessage, userId } = {}) {
     ? `# CRITICAL: REPLY LANGUAGE\nThe user's current message is in ${replyLang}. Reply in ${replyLang}. This overrides any pattern from RECENT CHATS.`
     : '';
 
+  const userIdentitySection = firstName
+    ? section(
+        'USER NAME',
+        `First name: ${firstName}\n` +
+        `Address them by name occasionally — at greetings, key emotional transitions, ` +
+        `or when the moment calls for a personal touch. Never overuse it (max once or ` +
+        `twice per <say> block); leaning on it makes the radio feel like a chatbot ` +
+        `rather than a real DJ who knows their listener.`,
+      )
+    : null;
+
   const stable = [
     persona,
+    userIdentitySection,
     section('USER TASTE', taste),
     section('USER ROUTINES', routines),
     section('MOOD RULES', moodRules),

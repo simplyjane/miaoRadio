@@ -54,7 +54,11 @@ export async function handleAutoShow(user) {
 
 async function runDJ({ trigger, langHint, user }) {
   const t0 = Date.now();
-  const system = await buildSystemPrompt({ userMessage: langHint, userId: user.id });
+  const system = await buildSystemPrompt({
+    userMessage: langHint,
+    userId: user.id,
+    userName: user.name,
+  });
   const tPrompt = Date.now();
 
   const wrapper = await callClaude({ system, user: trigger });
