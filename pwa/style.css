@@ -892,3 +892,12 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   50%       { content: '..'; }
   75%, 100% { content: '...'; }
 }
+
+/* Saved-state flash for the settings SAVE button — green tint + checkmark
+   for ~2s, scoped to .google-btn so it doesn't bleed elsewhere. */
+.google-btn.saved-flash {
+  background: #5cb85c;
+  color: #fff;
+  transition: background .2s ease, color .2s ease;
+}
+.google-btn.saved-flash:hover { background: #5cb85c; color: #fff; }

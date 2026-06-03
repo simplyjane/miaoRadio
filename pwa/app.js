@@ -864,12 +864,19 @@
     renderCalendarStatus({ calendar_connected: false });
   });
 
+  let savedFlashTimer = null;
   $('settingsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = $('settingsSaveBtn');
     btn.disabled = true;
     $('settingsError').hidden = true;
     $('settingsOk').hidden = true;
+    // If a previous save's flash is still showing, clear it now so the
+    // button doesn't get stuck displaying the old "SAVED" state.
+    if (savedFlashTimer) { clearTimeout(savedFlashTimer); savedFlashTimer = null; }
+    btn.classList.remove('saved-flash');
+    const originalLabel = t('save');
+    btn.textContent = '…';
     try {
       const corpusRes = await fetch('/api/me/corpus', {
         method: 'POST',
@@ -892,9 +899,20 @@
         }),
       });
       if (!settingsRes.ok) throw new Error('settings save failed');
+      // Visible success right at the cursor: the button itself flashes a
+      // checkmark for 2s, then returns to "SAVE".
+      btn.textContent = '✓ ' + t('saved').replace(/\.$/, '').toUpperCase();
+      btn.classList.add('saved-flash');
       $('settingsOk').textContent = t('saved');
       $('settingsOk').hidden = false;
+      savedFlashTimer = setTimeout(() => {
+        btn.textContent = originalLabel;
+        btn.classList.remove('saved-flash');
+        $('settingsOk').hidden = true;
+        savedFlashTimer = null;
+      }, 2000);
     } catch (err) {
+      btn.textContent = originalLabel;
       $('settingsError').textContent = t('save_failed', { err: err.message });
       $('settingsError').hidden = false;
     } finally {
