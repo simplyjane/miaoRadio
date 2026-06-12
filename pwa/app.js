@@ -312,6 +312,11 @@
           if (e.data === YT.PlayerState.BUFFERING) {
             setNowState(t('buffering'));
           }
+          // iOS Safari sometimes drops loadVideoById into CUED instead of
+          // auto-playing the next track. Nudge it forward.
+          if (e.data === YT.PlayerState.CUED) {
+            try { state.player.playVideo?.(); } catch {}
+          }
         },
         onError: () => {
           setNowState(t('yt_error'));
@@ -996,6 +1001,20 @@
       return;
     }
     state.player.loadVideoById(song.videoId);
+    // Belt-and-suspenders for mobile: after loadVideoById, if the player
+    // hasn't moved into PLAYING or BUFFERING within 600ms, kick it.
+    // YT iframe API on iOS Safari frequently fails to autoplay between
+    // videos even when the session is already user-activated.
+    setTimeout(() => {
+      try {
+        const PS = window.YT?.PlayerState;
+        if (!PS) return;
+        const ps = state.player.getPlayerState?.();
+        if (ps !== PS.PLAYING && ps !== PS.BUFFERING) {
+          state.player.playVideo?.();
+        }
+      } catch {}
+    }, 600);
     reportPlay(song);
   }
 
