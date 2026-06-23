@@ -231,6 +231,9 @@ app.post('/api/chat', async (req, res) => {
     res.json({ ...result, user: publicUserShape({ ...user, chats_used: user.chats_used + (user.is_guest ? 1 : 0) }) });
   } catch (e) {
     console.error('[chat]', e);
+    if (e.code === 'overloaded') {
+      return res.status(503).json({ error: 'service_busy', retryable: true });
+    }
     res.status(500).json({ error: e.message });
   }
 });
@@ -245,6 +248,9 @@ app.post('/api/auto-show', async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error('[auto-show]', e);
+    if (e.code === 'overloaded') {
+      return res.status(503).json({ error: 'service_busy', retryable: true });
+    }
     res.status(500).json({ error: e.message });
   }
 });

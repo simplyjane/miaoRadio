@@ -68,6 +68,8 @@
       reading_the_room: 'Reading the room',
       trial_limit_reached: 'Trial limit reached.',
       error_prefix: 'ERROR · {msg}',
+      service_busy_state: 'CLAUDE BUSY · RETRYING…',
+      service_busy_text: 'Claude is briefly overloaded. Hold on a moment and I\'ll try again.',
       chat_placeholder: 'what do you want to hear?', send: 'SEND',
       join: 'JOIN miaoRadio',
       login_lede: 'Enter your invitation code, then sign in with Google.',
@@ -133,6 +135,8 @@
       reading_the_room: "Je lis l'ambiance",
       trial_limit_reached: "Limite d'essai atteinte.",
       error_prefix: 'ERREUR · {msg}',
+      service_busy_state: 'CLAUDE SATURÉ · NOUVELLE TENTATIVE…',
+      service_busy_text: "Claude est temporairement saturé. Patiente un instant, je réessaie.",
       chat_placeholder: 'que voulez-vous entendre ?', send: 'ENVOYER',
       join: 'REJOINDRE miaoRadio',
       login_lede: "Entrez votre code d'invitation, puis connectez-vous avec Google.",
@@ -377,13 +381,24 @@
       state.pendingNext = null;
       state.waitingForNext = false;
 
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ message }),
-      });
-      const data = await res.json();
+      // Retry transparently on 503 service_busy (Claude API overloaded).
+      // Up to 3 attempts with 2s / 4s / 8s backoff. The user sees a calmer
+      // "CLAUDE BUSY · RETRYING…" status instead of a hard ERROR.
+      let res, data, attempt = 0;
+      while (true) {
+        res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ message }),
+        });
+        data = await res.json().catch(() => ({}));
+        if (res.status !== 503 || data?.error !== 'service_busy' || attempt >= 3) break;
+        attempt++;
+        setNowState(t('service_busy_state'));
+        setDjText(t('service_busy_text'), false);
+        await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, attempt - 1)));
+      }
       if (res.status === 402 && data.error === 'signup_required') {
         setLoading(false);
         openLoginModal({

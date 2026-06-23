@@ -65,7 +65,12 @@ async function runDJ({ trigger, langHint, user }) {
   const tClaude = Date.now();
 
   if (wrapper.is_error || (wrapper.subtype && wrapper.subtype !== 'success')) {
-    throw new Error(`claude error: ${wrapper.result || JSON.stringify(wrapper).slice(0, 200)}`);
+    // Surface overload separately so the API can return a kinder status code
+    // and the client can show a "service busy, retrying" message instead of
+    // a generic ERROR.
+    const e = new Error(wrapper.result || 'claude error');
+    if (wrapper.subtype === 'overloaded') e.code = 'overloaded';
+    throw e;
   }
 
   const dj = parseDJResponse(wrapper.result ?? '');

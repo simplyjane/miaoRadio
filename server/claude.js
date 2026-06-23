@@ -21,8 +21,17 @@ function getClient() {
   if (client) return client;
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set');
-  client = new Anthropic({ apiKey });
+  // Default maxRetries is 2. Bump to 4 so transient 529/overloaded events
+  // (a few seconds of Anthropic capacity pressure) heal silently instead of
+  // surfacing as ERROR to the user. SDK uses jittered exponential backoff.
+  client = new Anthropic({ apiKey, maxRetries: 4 });
   return client;
+}
+
+// Anthropic uses 529 for "Overloaded" and 429 for rate-limit. Treat both as
+// transient capacity errors so we can return a kinder code to the client.
+function isOverloadStatus(s) {
+  return s === 529 || s === 429 || s === 503;
 }
 
 /**
@@ -62,9 +71,11 @@ export async function callClaude({ system, user, timeoutMs = 60_000 }) {
       stop_reason: response.stop_reason,
     };
   } catch (err) {
+    const status = err?.status ?? err?.response?.status;
     return {
       is_error: true,
-      subtype: 'error',
+      subtype: isOverloadStatus(status) ? 'overloaded' : 'error',
+      status,
       result: err?.message || String(err),
     };
   }
