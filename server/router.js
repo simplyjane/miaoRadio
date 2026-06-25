@@ -43,7 +43,7 @@ export async function handleAutoShow(user) {
   const trigger = [
     '[AUTO-CONTINUE]',
     'The current on-air queue is about to run out. Continue your show.',
-    'Pick 4–6 fresh tracks that fit RIGHT NOW: time of day, weather, mood signals,',
+    'Pick about 8 fresh tracks (6–10) that fit RIGHT NOW: time of day, weather, mood signals,',
     "today's calendar, and the user's taste corpus. Do NOT repeat anything in RECENTLY PLAYED.",
     'In <say>, write a short on-air transition (1–2 sentences) — like a radio DJ bridging into the next set.',
     'No questions; the listener is not at the keyboard. Just keep the show going.',
