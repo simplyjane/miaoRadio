@@ -246,9 +246,24 @@
 
   /* ───── iframe visibility (persisted, hidden by default) ───── */
   function setIframeHidden(hidden) {
-    $('iframeWrap').classList.toggle('hidden', hidden);
+    const wrap = $('iframeWrap');
+    wrap.classList.toggle('hidden', hidden);
     $('btnHide').textContent = hidden ? t('show') : t('hide');
     localStorage.setItem('miao.iframeHidden', hidden ? '1' : '0');
+    // When we transition from hidden to visible, force the YT player to
+    // redraw at the new wrap dimensions. The player was created while the
+    // wrap was 0×0 so its internal state thinks the iframe is invisible —
+    // without setSize() it renders as a black rectangle even though the
+    // video is playing.
+    if (!hidden && state.player?.setSize) {
+      requestAnimationFrame(() => {
+        try {
+          const w = wrap.clientWidth;
+          const h = wrap.clientHeight;
+          if (w && h) state.player.setSize(w, h);
+        } catch {}
+      });
+    }
   }
   {
     const saved = localStorage.getItem('miao.iframeHidden');
