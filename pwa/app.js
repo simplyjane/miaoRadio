@@ -252,6 +252,7 @@
     applyStaticI18n();
     // Re-render dynamic state that depends on language.
     renderAuthPill(state.user);
+    if (typeof updateVoiceChip === 'function') updateVoiceChip();
     tickClock();
     if (state.queue.length === 0 && !state.loading) {
       // Refresh the queue placeholder if it's currently empty/idle.
@@ -804,6 +805,7 @@
       const data = await res.json();
       state.user = data.user;
       renderAuthPill(state.user);
+      syncVoiceFromServer();
     } catch (err) {
       console.warn('[auth/me]', err);
     }
@@ -1142,6 +1144,99 @@
   function readSelectedVoiceId() {
     const opt = $('setVoice').selectedOptions?.[0];
     return opt?.dataset.vid || '';
+  }
+
+  /* ───── home-page voice picker (lives in the dj-head) ─────────────────
+     Mirrors the same VOICE_PRESETS catalog. Saves instantly on selection
+     via /api/me/settings (partial update — doesn't touch weather_city).
+     Guests get the signup modal when they tap. */
+  let currentVoiceId = '';  // tracks what's saved server-side
+  function updateVoiceChip() {
+    const labelEl = $('djVoiceLabel');
+    const preset = VOICE_PRESETS.find((v) => v.id === currentVoiceId)
+      || VOICE_PRESETS.find((v) => v.id === '');
+    if (preset) labelEl.textContent = t(preset.nameKey);
+  }
+  function renderVoicePopover() {
+    const pop = $('djVoicePopover');
+    pop.innerHTML = VOICE_PRESETS.map((v, i) => {
+      const active = v.id === currentVoiceId ? ' active' : '';
+      return `
+        <button type="button" class="dj-voice-option${active}" role="option"
+                data-preset-idx="${i}" data-vid="${esc(v.id)}">
+          <span class="dj-voice-option-name">${esc(t(v.nameKey))}</span>
+          <span class="dj-voice-option-desc">${esc(t(v.descKey))}</span>
+        </button>
+      `;
+    }).join('');
+  }
+  function openVoicePopover() {
+    renderVoicePopover();
+    $('djVoicePopover').hidden = false;
+    $('djVoicePicker').classList.add('open');
+    $('djVoiceBtn').setAttribute('aria-expanded', 'true');
+  }
+  function closeVoicePopover() {
+    $('djVoicePopover').hidden = true;
+    $('djVoicePicker').classList.remove('open');
+    $('djVoiceBtn').setAttribute('aria-expanded', 'false');
+  }
+  async function saveVoice(newId) {
+    currentVoiceId = newId;
+    updateVoiceChip();
+    closeVoicePopover();
+    try {
+      await fetch('/api/me/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ tts_reference_id: newId }),
+      });
+    } catch (err) {
+      console.warn('[voice save]', err);
+    }
+  }
+  $('djVoiceBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Guests can't save server-side preferences — route to signup.
+    if (!state.user || state.user.isGuest) {
+      openLoginModal({ lede: t('react_signup_lede') });
+      return;
+    }
+    if ($('djVoicePopover').hidden) openVoicePopover();
+    else closeVoicePopover();
+  });
+  $('djVoicePopover').addEventListener('click', (e) => {
+    const opt = e.target.closest('.dj-voice-option');
+    if (!opt) return;
+    const vid = opt.dataset.vid || '';
+    if (vid !== currentVoiceId) saveVoice(vid);
+    else closeVoicePopover();
+  });
+  document.addEventListener('click', (e) => {
+    if ($('djVoicePopover').hidden) return;
+    if (!$('djVoicePicker').contains(e.target)) closeVoicePopover();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('djVoicePopover').hidden) closeVoicePopover();
+  });
+
+  // Fetch the saved voice on bootstrap so the chip reflects truth on load.
+  async function syncVoiceFromServer() {
+    if (!state.user || state.user.isGuest) {
+      currentVoiceId = '';
+      updateVoiceChip();
+      return;
+    }
+    try {
+      const res = await fetch('/api/me/settings', { credentials: 'same-origin' });
+      if (!res.ok) return;
+      const data = await res.json();
+      currentVoiceId = data.tts_reference_id || '';
+      updateVoiceChip();
+    } catch (err) {
+      console.warn('[voice sync]', err);
+    }
   }
 
   let codeValidateTimer = null;

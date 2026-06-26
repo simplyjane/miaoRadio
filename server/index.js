@@ -166,11 +166,22 @@ app.get('/api/me/settings', (req, res) => {
 app.post('/api/me/settings', (req, res) => {
   const user = requireSignedIn(req, res);
   if (!user) return;
-  const { weather_city, tts_reference_id } = req.body ?? {};
-  setSettings(user.id, {
-    weather_city: (weather_city ?? '').trim() || null,
-    tts_reference_id: (tts_reference_id ?? '').trim() || null,
-  });
+  // Partial update: only overwrite fields the caller explicitly sent. Lets
+  // the home-page voice chip change tts_reference_id without blowing away
+  // the user's weather_city, and vice versa for the settings drawer.
+  const body = req.body ?? {};
+  const existing = getSettings(user.id) || {};
+  const next = {
+    weather_city: existing.weather_city || null,
+    tts_reference_id: existing.tts_reference_id || null,
+  };
+  if ('weather_city' in body) {
+    next.weather_city = String(body.weather_city || '').trim() || null;
+  }
+  if ('tts_reference_id' in body) {
+    next.tts_reference_id = String(body.tts_reference_id || '').trim() || null;
+  }
+  setSettings(user.id, next);
   res.json({ ok: true });
 });
 

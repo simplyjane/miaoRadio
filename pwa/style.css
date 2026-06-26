@@ -1417,3 +1417,94 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   margin-top: 6px;
   text-transform: none;
 }
+
+/* ─── HOME-PAGE VOICE PICKER (in the dj-head) ────────────────────────────
+   A small mono chip with a caret that opens a popover with the curated
+   voice list. Saves on click, no Save button — the dj-head reads as
+   broadcast-equipment-style instant-switch hardware. */
+.dj-voice-picker {
+  position: relative;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.dj-voice-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 5px 9px 5px 11px;
+  background: var(--bg);
+  border: 1px solid var(--line-bright);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+.dj-voice-btn:hover:not(:disabled) { color: var(--text); border-color: var(--text-dim); }
+.dj-voice-btn:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.dj-voice-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 18ch;
+}
+.dj-voice-caret { font-size: 9px; opacity: 0.7; }
+.dj-voice-picker.open .dj-voice-btn { color: var(--text); border-color: var(--text); }
+
+.dj-voice-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  min-width: 240px;
+  max-width: min(340px, calc(100vw - 32px));
+  background: var(--panel);
+  border: 1px solid var(--line-bright);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  padding: 6px;
+}
+.dj-voice-popover[hidden] { display: none; }
+.dj-voice-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  text-align: left;
+}
+.dj-voice-option:hover { background: var(--bg); color: var(--text); border-color: var(--line-bright); }
+.dj-voice-option.active {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--accent);
+}
+.dj-voice-option-name {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.dj-voice-option-desc {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  text-transform: none;
+}
+.dj-voice-option.active .dj-voice-option-desc { color: var(--text-dim); }
+
+/* When viewport narrows, the dj-head gets tight. Drop the picker max width
+   so the brand-mini + bars don't collide. */
+@media (max-width: 520px) {
+  .dj-voice-btn { font-size: 9px; padding: 4px 7px; }
+  .dj-voice-label { max-width: 12ch; letter-spacing: 0.1em; }
+}
