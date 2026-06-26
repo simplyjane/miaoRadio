@@ -171,42 +171,86 @@
       </header>
       <div class="dj-body">
         <div class="avatar" id="djAvatar" aria-hidden="true">
-          <svg viewBox="0 0 60 60" class="kitty">
-            <!-- Ears (with pink inner) -->
-            <g class="kitty-ear ear-left">
-              <path d="M10 16 Q8 4 18 9 L20 18 Z" fill="currentColor"/>
-              <path d="M13 14 Q12 8 17 11 L18 16 Z" class="kitty-pink"/>
+          <svg viewBox="0 0 80 80" class="kitty">
+            <!-- Floating heart sparkles (decorative, fade in/out periodically) -->
+            <g class="kitty-sparkles">
+              <text class="sparkle sp-h1" x="8"  y="22" font-size="6">♡</text>
+              <text class="sparkle sp-h2" x="68" y="14" font-size="5">♡</text>
+              <text class="sparkle sp-s1" x="70" y="36" font-size="6">✦</text>
+              <text class="sparkle sp-s2" x="6"  y="44" font-size="5">✦</text>
             </g>
-            <g class="kitty-ear ear-right">
-              <path d="M50 16 Q52 4 42 9 L40 18 Z" fill="currentColor"/>
-              <path d="M47 14 Q48 8 43 11 L42 16 Z" class="kitty-pink"/>
-            </g>
-            <!-- Head -->
-            <ellipse class="kitty-head" cx="30" cy="34" rx="20" ry="17" fill="currentColor"/>
-            <!-- Blush cheeks -->
-            <ellipse class="kitty-blush" cx="13" cy="36" rx="3" ry="2"/>
-            <ellipse class="kitty-blush" cx="47" cy="36" rx="3" ry="2"/>
-            <!-- Eyes (round with sparkle) -->
-            <g class="kitty-eye eye-left">
-              <ellipse class="kitty-eyeball" cx="22" cy="30" rx="3" ry="3.6"/>
-              <circle class="kitty-sparkle" cx="23" cy="28.5" r="0.9"/>
-            </g>
-            <g class="kitty-eye eye-right">
-              <ellipse class="kitty-eyeball" cx="38" cy="30" rx="3" ry="3.6"/>
-              <circle class="kitty-sparkle" cx="39" cy="28.5" r="0.9"/>
-            </g>
-            <!-- Heart-shaped nose -->
-            <path class="kitty-nose" d="M30 35 Q28 33 27 35 Q27 37 30 38 Q33 37 33 35 Q32 33 30 35 Z"/>
-            <!-- Mouth (animated when speaking) -->
-            <g class="kitty-mouth-group">
-              <path class="kitty-mouth" d="M27 40 Q30 42 33 40" fill="none"/>
-            </g>
-            <!-- Whiskers -->
-            <g class="kitty-whiskers">
-              <line x1="4" y1="34" x2="13" y2="33"/>
-              <line x1="4" y1="37" x2="13" y2="37"/>
-              <line x1="47" y1="33" x2="56" y2="34"/>
-              <line x1="47" y1="37" x2="56" y2="37"/>
+
+            <g class="kitty-body-group">
+              <!-- Tail (curling, behind body) -->
+              <path class="kitty-tail" d="M 22 60 Q 10 56 12 42 Q 14 32 22 32"
+                    fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+
+              <!-- Body (chunky, partially hidden by head) -->
+              <ellipse class="kitty-body" cx="40" cy="64" rx="22" ry="13" fill="currentColor"/>
+
+              <!-- Front paws peeking up from the bottom -->
+              <g class="kitty-paws">
+                <ellipse class="paw paw-left"  cx="30" cy="72" rx="6.5" ry="4.5" fill="currentColor"/>
+                <ellipse class="paw paw-right" cx="50" cy="72" rx="6.5" ry="4.5" fill="currentColor"/>
+                <!-- toe beans -->
+                <circle class="bean" cx="30" cy="71" r="1.1"/>
+                <circle class="bean" cx="50" cy="71" r="1.1"/>
+              </g>
+
+              <!-- Ears (rounded chibi triangles with pink inner) -->
+              <g class="kitty-ear ear-left">
+                <path d="M 19 24 Q 14 6 30 18 L 28 28 Z" fill="currentColor"/>
+                <path d="M 23 22 Q 21 12 27 19 L 26 25 Z" class="kitty-pink"/>
+              </g>
+              <g class="kitty-ear ear-right">
+                <path d="M 61 24 Q 66 6 50 18 L 52 28 Z" fill="currentColor"/>
+                <path d="M 57 22 Q 59 12 53 19 L 54 25 Z" class="kitty-pink"/>
+              </g>
+
+              <!-- Head (big and round) -->
+              <ellipse class="kitty-head" cx="40" cy="42" rx="23" ry="21" fill="currentColor"/>
+
+              <!-- Blush cheeks -->
+              <ellipse class="kitty-blush" cx="21" cy="46" rx="4.5" ry="3"/>
+              <ellipse class="kitty-blush" cx="59" cy="46" rx="4.5" ry="3"/>
+
+              <!-- Eyes (HUGE chibi style with two sparkle highlights each) -->
+              <g class="kitty-eye eye-left">
+                <ellipse class="kitty-eyeball" cx="30" cy="42" rx="5.2" ry="6.5"/>
+                <ellipse class="kitty-sparkle big"   cx="31.5" cy="39.2" rx="2" ry="2.4"/>
+                <circle  class="kitty-sparkle small" cx="28.3" cy="44.5" r="0.9"/>
+              </g>
+              <g class="kitty-eye eye-right">
+                <ellipse class="kitty-eyeball" cx="50" cy="42" rx="5.2" ry="6.5"/>
+                <ellipse class="kitty-sparkle big"   cx="51.5" cy="39.2" rx="2" ry="2.4"/>
+                <circle  class="kitty-sparkle small" cx="48.3" cy="44.5" r="0.9"/>
+              </g>
+
+              <!-- Closed-eye state (^_^) — swaps in when blinking or sleeping -->
+              <g class="kitty-eye-closed left">
+                <path d="M 26 42 Q 30 45 34 42" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </g>
+              <g class="kitty-eye-closed right">
+                <path d="M 46 42 Q 50 45 54 42" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </g>
+
+              <!-- Tiny heart nose -->
+              <path class="kitty-nose" d="M40 49 Q38 47.5 37 49 Q37 50.5 40 52 Q43 50.5 43 49 Q42 47.5 40 49 Z"/>
+
+              <!-- Mouth (:3 by default, opens to "owo" when talking) -->
+              <g class="kitty-mouth-group">
+                <path class="kitty-mouth-3" d="M40 52 Q37 54.5 35 53 M40 52 Q43 54.5 45 53"
+                      fill="none" stroke-linecap="round"/>
+                <ellipse class="kitty-mouth-o" cx="40" cy="54" rx="2.2" ry="1.6"/>
+              </g>
+
+              <!-- Whiskers -->
+              <g class="kitty-whiskers">
+                <line x1="6"  y1="46" x2="16" y2="47"/>
+                <line x1="6"  y1="50" x2="16" y2="50"/>
+                <line x1="64" y1="47" x2="74" y2="46"/>
+                <line x1="64" y1="50" x2="74" y2="50"/>
+              </g>
             </g>
           </svg>
         </div>
