@@ -1,13 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <style>
-    .body { fill: #14140f; }
-    .eye  { fill: #14140f; }
-    .glint{ fill: #ffffff; }
+    /* Old-radio amber palette — same #ff9a3c / #b86a1a from the hero's
+       radio face. Brighter amber for dark browser tabs, darker amber
+       for light tabs so the silhouette stays legible either way. */
+    .body { fill: #b86a1a; }
+    .eye  { fill: #2a1404; }
+    .glint{ fill: #fff7e0; }
     .pink { fill: #ff7fac; }
     @media (prefers-color-scheme: dark) {
-      .body { fill: #5dffa1; }
-      .eye  { fill: #050505; }
-      .glint{ fill: #ffffff; }
+      .body { fill: #ff9a3c; }
+      .eye  { fill: #2a1404; }
+      .glint{ fill: #fff7e0; }
     }
   </style>
   <!-- Ears (rounded chibi triangles) -->
