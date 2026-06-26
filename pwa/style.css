@@ -1285,3 +1285,32 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   text-transform: uppercase;
   color: var(--text-dim);
 }
+
+/* Voice picker dropdown — matches the existing settings input styling */
+.voice-select {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+                    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+  background-position: right 14px center, right 9px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+.voice-select:focus { outline: none; border-color: var(--text-dim); }
+.voice-help {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-top: 6px;
+  text-transform: none;
+}

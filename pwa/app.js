@@ -70,6 +70,20 @@
       error_prefix: 'ERROR · {msg}',
       service_busy_state: 'CLAUDE BUSY · RETRYING…',
       service_busy_text: 'Claude is briefly overloaded. Hold on a moment and I\'ll try again.',
+      dj_voice: 'DJ VOICE',
+      voice_help: 'Pick the voice the DJ uses between tracks.',
+      voice_default: 'System default',
+      voice_default_desc: 'Whatever Fish Audio falls back to',
+      voice_asmr: 'ASMR Narrator',
+      voice_asmr_desc: 'Breathy, intimate, late-night',
+      voice_warm_male: 'Warm Male',
+      voice_warm_male_desc: 'Mid-tone, conversational, friendly',
+      voice_warm_female: 'Warm Female',
+      voice_warm_female_desc: 'Soft, lyrical, gentle warmth',
+      voice_dramatic: 'Cinematic Narrator',
+      voice_dramatic_desc: 'Slow, weighty, film-trailer gravitas',
+      voice_bilingual: 'Bilingual Mandarin',
+      voice_bilingual_desc: 'Native-sounding Chinese + English',
       song_info_title: 'SONG INFO',
       song_info_loading: 'SEARCHING WIKIPEDIA…',
       song_info_empty: 'No Wikipedia entry found. Try searching the community instead.',
@@ -144,6 +158,20 @@
       error_prefix: 'ERREUR · {msg}',
       service_busy_state: 'CLAUDE SATURÉ · NOUVELLE TENTATIVE…',
       service_busy_text: "Claude est temporairement saturé. Patiente un instant, je réessaie.",
+      dj_voice: 'VOIX DU DJ',
+      voice_help: 'Choisissez la voix que le DJ utilise entre les titres.',
+      voice_default: 'Voix par défaut',
+      voice_default_desc: 'Celle de Fish Audio par défaut',
+      voice_asmr: 'Narrateur ASMR',
+      voice_asmr_desc: 'Souffle proche, intime, fin de soirée',
+      voice_warm_male: 'Voix masculine chaleureuse',
+      voice_warm_male_desc: 'Tons moyens, conversationnel, amical',
+      voice_warm_female: 'Voix féminine chaleureuse',
+      voice_warm_female_desc: 'Douce, lyrique, chaleur tranquille',
+      voice_dramatic: 'Narrateur cinématique',
+      voice_dramatic_desc: 'Lent, dense, gravité de bande-annonce',
+      voice_bilingual: 'Mandarin bilingue',
+      voice_bilingual_desc: 'Chinois natif + anglais',
       song_info_title: 'INFO TITRE',
       song_info_loading: 'RECHERCHE DANS WIKIPÉDIA…',
       song_info_empty: 'Aucun article Wikipédia trouvé. Essayez la discussion communautaire.',
@@ -1043,6 +1071,56 @@
     if (e.target.id === 'songInfoModal') closeSongInfoModal();
   });
 
+  /* ───── DJ voice catalog (curated Fish Audio reference IDs) ───────────
+     Each preset = { id, nameKey, descKey }. The `id` empty string means
+     "let Fish Audio use whatever it defaults to" (we omit reference_id
+     from the synth call). To add a voice: find it on https://fish.audio,
+     copy its reference UUID from the URL, append one row here, add the
+     two i18n keys for the name + description.
+     Note: the IDs below other than ASMR_NARRATOR_ID are placeholders —
+     update them with real Fish Audio reference UUIDs to enable. */
+  const ASMR_NARRATOR_ID = '1ca7bc02099d47f1ae06b31f26875523';
+  const VOICE_PRESETS = [
+    { id: '',                    nameKey: 'voice_default',     descKey: 'voice_default_desc' },
+    { id: ASMR_NARRATOR_ID,      nameKey: 'voice_asmr',        descKey: 'voice_asmr_desc' },
+    // To enable these, replace each `id` with a real Fish Audio reference
+    // UUID (32 hex chars). Until then, picking one falls back to Default.
+    { id: '',                    nameKey: 'voice_warm_male',   descKey: 'voice_warm_male_desc' },
+    { id: '',                    nameKey: 'voice_warm_female', descKey: 'voice_warm_female_desc' },
+    { id: '',                    nameKey: 'voice_dramatic',    descKey: 'voice_dramatic_desc' },
+    { id: '',                    nameKey: 'voice_bilingual',   descKey: 'voice_bilingual_desc' },
+  ];
+  function renderVoiceSelect(currentValue) {
+    const sel = $('setVoice');
+    // De-dupe by name so unfilled placeholders don't all collapse on the
+    // first empty option in the browser's selectedIndex logic.
+    sel.innerHTML = VOICE_PRESETS.map((v, i) => {
+      const label = t(v.nameKey);
+      const desc = t(v.descKey);
+      // Use the array index as a stable value so multiple presets with
+      // empty `id` are still distinguishable in the <select>.
+      const optVal = `__preset_${i}`;
+      return `<option value="${esc(optVal)}" data-vid="${esc(v.id)}">${esc(label)} — ${esc(desc)}</option>`;
+    }).join('');
+    // Select the option whose data-vid matches the saved reference_id.
+    // Fall back to the first preset (System default) if no match.
+    const target = String(currentValue ?? '');
+    let matched = false;
+    for (const opt of sel.options) {
+      if (opt.dataset.vid === target) {
+        sel.value = opt.value;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) sel.selectedIndex = 0;
+    $('setVoiceHelp').textContent = t('voice_help');
+  }
+  function readSelectedVoiceId() {
+    const opt = $('setVoice').selectedOptions?.[0];
+    return opt?.dataset.vid || '';
+  }
+
   let codeValidateTimer = null;
   $('inviteCode').addEventListener('input', () => {
     const code = $('inviteCode').value.trim();
@@ -1110,7 +1188,7 @@
       $('setRoutines').value = corpus.routines || '';
       $('setMood').value = corpus.mood_rules || '';
       $('setCity').value = settings.weather_city || '';
-      $('setVoice').value = settings.tts_reference_id || '';
+      renderVoiceSelect(settings.tts_reference_id || '');
       renderCalendarStatus(settings);
     } catch (err) {
       $('settingsError').textContent = t('load_settings_failed', { err: err.message });
@@ -1179,7 +1257,7 @@
         credentials: 'same-origin',
         body: JSON.stringify({
           weather_city: $('setCity').value,
-          tts_reference_id: $('setVoice').value,
+          tts_reference_id: readSelectedVoiceId(),
         }),
       });
       if (!settingsRes.ok) throw new Error('settings save failed');
