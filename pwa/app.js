@@ -1086,9 +1086,9 @@
     // To enable these, replace each `id` with a real Fish Audio reference
     // UUID (32 hex chars). Until then, picking one falls back to Default.
     { id: 'f35dce726f1543239e2031f7f27eb132', nameKey: 'voice_warm_male', descKey: 'voice_warm_male_desc' },
-    { id: '',                    nameKey: 'voice_warm_female', descKey: 'voice_warm_female_desc' },
-    { id: '',                    nameKey: 'voice_dramatic',    descKey: 'voice_dramatic_desc' },
-    { id: '',                    nameKey: 'voice_bilingual',   descKey: 'voice_bilingual_desc' },
+    { id: '217d184dc3d1438c8027839b0cfa4fc8', nameKey: 'voice_warm_female', descKey: 'voice_warm_female_desc' },
+    { id: 'dd4525b59d084dd5ace681e43ee7e251', nameKey: 'voice_dramatic',    descKey: 'voice_dramatic_desc' },
+    { id: 'ef9e7efbf1c34ebdaeb72353c873650f', nameKey: 'voice_bilingual',   descKey: 'voice_bilingual_desc' },
   ];
   function renderVoiceSelect(currentValue) {
     const sel = $('setVoice');
