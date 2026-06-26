@@ -1218,10 +1218,35 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
 .songinfo-section-body:not(:has(.songinfo-thumb)) {
   grid-template-columns: 1fr;
 }
+/* .songinfo-thumb is now a positioned container that holds a placeholder
+   and (optionally) an <img> overlay. The placeholder shows through any
+   time the image is missing, transparent, or broken. */
 .songinfo-thumb {
+  position: relative;
   width: 92px; height: 92px;
-  object-fit: cover;
   border: 1px solid var(--line-bright);
+  background: var(--bg);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.songinfo-thumb-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  background-image: radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0);
+  background-size: 8px 8px;
+}
+.songinfo-thumb-placeholder svg {
+  width: 60%; height: 60%;
+}
+.songinfo-thumb-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
   background: var(--bg);
 }
 .songinfo-summary {

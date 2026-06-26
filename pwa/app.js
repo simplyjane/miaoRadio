@@ -914,15 +914,40 @@
     const q = [artist, title].filter(Boolean).join(' ');
     return `https://www.reddit.com/search/?q=${encodeURIComponent(q)}`;
   }
+  // Vinyl-record placeholder used whenever a section has no thumbnail —
+  // either no Wikipedia thumb AND no YT Music thumb, OR the thumb URL 404s.
+  // The placeholder sits underneath the <img>; if the image fails to load,
+  // onerror hides the img and the placeholder shows through.
+  const THUMB_PLACEHOLDER_SVG = `
+    <div class="songinfo-thumb-placeholder" aria-hidden="true">
+      <svg viewBox="0 0 60 60" preserveAspectRatio="xMidYMid meet">
+        <circle cx="30" cy="30" r="27" fill="none" stroke="currentColor" stroke-width="1"/>
+        <circle cx="30" cy="30" r="21" fill="none" stroke="currentColor" stroke-width="0.5" opacity="0.55"/>
+        <circle cx="30" cy="30" r="15" fill="none" stroke="currentColor" stroke-width="0.5" opacity="0.55"/>
+        <circle cx="30" cy="30" r="9" fill="currentColor" opacity="0.18"/>
+        <circle cx="30" cy="30" r="1.6" fill="currentColor"/>
+      </svg>
+    </div>`;
+  function thumbHtml(src) {
+    if (!src) {
+      // No URL at all — render placeholder solo, sized via .songinfo-thumb.
+      return `<div class="songinfo-thumb">${THUMB_PLACEHOLDER_SVG}</div>`;
+    }
+    // Stack: placeholder underneath, image on top. If the image errors,
+    // hide it via onerror so the placeholder shows through.
+    return `<div class="songinfo-thumb">
+      ${THUMB_PLACEHOLDER_SVG}
+      <img class="songinfo-thumb-overlay" src="${esc(src)}" alt="" loading="lazy" onerror="this.style.display='none'">
+    </div>`;
+  }
+
   // Artist section — Wikipedia-only; hides if Wikipedia has no entry.
   function renderArtistSection(el, item) {
     if (!item) { el.hidden = true; el.innerHTML = ''; return; }
     el.hidden = false;
     const wikiLabel = t('song_info_wikipedia');
     const sectionLabel = t('song_info_artist');
-    const thumb = item.thumbnail
-      ? `<img class="songinfo-thumb" src="${esc(item.thumbnail)}" alt="" loading="lazy">`
-      : '';
+    const thumb = thumbHtml(item.thumbnail);
     const wikiLink = item.wikiUrl
       ? `<a class="songinfo-wiki" href="${esc(item.wikiUrl)}" target="_blank" rel="noopener">${esc(wikiLabel)}</a>`
       : '';
@@ -947,9 +972,7 @@
     el.hidden = false;
     const sectionLabel = t('song_info_track');
     const thumbSrc = wiki?.thumbnail || song.thumbnail || null;
-    const thumb = thumbSrc
-      ? `<img class="songinfo-thumb" src="${esc(thumbSrc)}" alt="" loading="lazy">`
-      : '';
+    const thumb = thumbHtml(thumbSrc);
     const metaBits = [];
     if (song.album) metaBits.push(esc(song.album));
     if (song.duration) metaBits.push(esc(song.duration));
