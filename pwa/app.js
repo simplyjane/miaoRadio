@@ -70,6 +70,13 @@
       error_prefix: 'ERROR · {msg}',
       service_busy_state: 'CLAUDE BUSY · RETRYING…',
       service_busy_text: 'Claude is briefly overloaded. Hold on a moment and I\'ll try again.',
+      song_info_title: 'SONG INFO',
+      song_info_loading: 'SEARCHING WIKIPEDIA…',
+      song_info_empty: 'No Wikipedia entry found. Try searching the community instead.',
+      song_info_wikipedia: 'WIKIPEDIA ↗',
+      song_info_reddit: 'DISCUSS ON REDDIT ↗',
+      song_info_artist: 'ARTIST',
+      song_info_track: 'TRACK',
       chat_placeholder: 'what do you want to hear?', send: 'SEND',
       join: 'JOIN miaoRadio',
       login_lede: 'Enter your invitation code, then sign in with Google.',
@@ -137,6 +144,13 @@
       error_prefix: 'ERREUR · {msg}',
       service_busy_state: 'CLAUDE SATURÉ · NOUVELLE TENTATIVE…',
       service_busy_text: "Claude est temporairement saturé. Patiente un instant, je réessaie.",
+      song_info_title: 'INFO TITRE',
+      song_info_loading: 'RECHERCHE DANS WIKIPÉDIA…',
+      song_info_empty: 'Aucun article Wikipédia trouvé. Essayez la discussion communautaire.',
+      song_info_wikipedia: 'WIKIPÉDIA ↗',
+      song_info_reddit: 'EN DISCUTER SUR REDDIT ↗',
+      song_info_artist: 'ARTISTE',
+      song_info_track: 'TITRE',
       chat_placeholder: 'que voulez-vous entendre ?', send: 'ENVOYER',
       join: 'REJOINDRE miaoRadio',
       login_lede: "Entrez votre code d'invitation, puis connectez-vous avec Google.",
@@ -454,7 +468,7 @@
     el.innerHTML = state.queue.map((s, i) => {
       const r = state.reactions.get(s.videoId) || 0;
       return `
-        <li class="${i === state.idx ? 'current' : ''}">
+        <li class="${i === state.idx ? 'current' : ''}" data-vid="${esc(s.videoId)}">
           <span class="qidx">${String(i + 1).padStart(2, '0')}</span>
           <span class="qtitle">${esc(s.title || s.query || '?')}</span>
           <span class="qartist">${esc(s.artist || '')}</span>
@@ -491,23 +505,58 @@
     if (on) renderLoadingQueue(label);
   }
 
-  // Event delegation: one listener for all thumb buttons (rerender swaps DOM).
+  // Event delegation on the queue: thumb buttons (existing) PLUS row taps —
+  // a row click jumps playback to that track and opens the song-info popup.
   $('queue').addEventListener('click', (e) => {
+    // Reaction click — handled first because the buttons are inside the row.
     const btn = e.target.closest('.rx-btn');
-    if (!btn) return;
-    // Guests can't save reactions — prompt them to sign up instead of silently
-    // pretending the click worked.
-    if (!state.user || state.user.isGuest) {
-      openLoginModal({ lede: t('react_signup_lede') });
+    if (btn) {
+      if (!state.user || state.user.isGuest) {
+        openLoginModal({ lede: t('react_signup_lede') });
+        return;
+      }
+      const videoId = btn.dataset.vid;
+      const clicked = Number(btn.dataset.rxn);
+      if (!videoId || !clicked) return;
+      const current = state.reactions.get(videoId) || 0;
+      const next = current === clicked ? 0 : clicked;
+      handleReaction(videoId, next);
       return;
     }
-    const videoId = btn.dataset.vid;
-    const clicked = Number(btn.dataset.rxn);
-    if (!videoId || !clicked) return;
-    const current = state.reactions.get(videoId) || 0;
-    // Re-clicking the same reaction clears it; otherwise sets to clicked.
-    const next = current === clicked ? 0 : clicked;
-    handleReaction(videoId, next);
+    // Row click — play this track + open info modal.
+    const row = e.target.closest('.queue li');
+    if (!row || row.classList.contains('queue-empty') || row.classList.contains('queue-skeleton')) return;
+    const vid = row.dataset.vid;
+    if (!vid) return;
+    const idx = state.queue.findIndex((s) => s.videoId === vid);
+    if (idx < 0) return;
+    state.idx = idx;
+    playCurrent();
+    openSongInfoModal(state.queue[idx]);
+  });
+
+  // GSAP-driven row hover: bubble-able mouseover/mouseout so the delegation
+  // works on rows rendered after this listener attached. Pointer events
+  // covered by the click handler above; no hover affordance on touch
+  // devices, which is the intended behavior.
+  let hoveredRow = null;
+  function settleRow(row) {
+    if (!row || !window.gsap) return;
+    window.gsap.to(row, { x: 0, duration: 0.28, ease: 'power3.out' });
+  }
+  $('queue').addEventListener('mouseover', (e) => {
+    const row = e.target.closest?.('.queue li');
+    if (!row || row === hoveredRow) return;
+    if (row.classList.contains('queue-empty') || row.classList.contains('queue-skeleton')) return;
+    settleRow(hoveredRow);
+    hoveredRow = row;
+    if (window.gsap) {
+      window.gsap.to(row, { x: 6, duration: 0.24, ease: 'power3.out' });
+    }
+  });
+  $('queue').addEventListener('mouseleave', () => {
+    settleRow(hoveredRow);
+    hoveredRow = null;
   });
 
   async function handleReaction(videoId, reaction) {
@@ -829,6 +878,127 @@
   $('loginClose').addEventListener('click', closeLoginModal);
   $('loginModal').addEventListener('click', (e) => {
     if (e.target.id === 'loginModal') closeLoginModal();
+  });
+
+  /* ───── song info modal ─────────────────────────────────────────────── */
+  let songInfoController = null;
+  function buildRedditUrl(artist, title) {
+    const q = [artist, title].filter(Boolean).join(' ');
+    return `https://www.reddit.com/search/?q=${encodeURIComponent(q)}`;
+  }
+  function renderSongInfoSection(el, kind, item) {
+    if (!item) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    const wikiLabel = t('song_info_wikipedia');
+    const sectionLabel = t(kind === 'artist' ? 'song_info_artist' : 'song_info_track');
+    const thumb = item.thumbnail
+      ? `<img class="songinfo-thumb" src="${esc(item.thumbnail)}" alt="" loading="lazy">`
+      : '';
+    const wikiLink = item.wikiUrl
+      ? `<a class="songinfo-wiki" href="${esc(item.wikiUrl)}" target="_blank" rel="noopener">${esc(wikiLabel)}</a>`
+      : '';
+    el.innerHTML = `
+      <header class="songinfo-section-head">
+        <span class="songinfo-section-label">${esc(sectionLabel)}</span>
+        <span class="songinfo-section-name">${esc(item.name || item.title || '')}</span>
+      </header>
+      <div class="songinfo-section-body">
+        ${thumb}
+        <p class="songinfo-summary">${esc(item.summary || '')}</p>
+      </div>
+      ${wikiLink}
+    `;
+  }
+  // GSAP-driven entry: the backdrop fades, the card eases up with a tiny
+  // scale settle, and the content stagger reveals after the fetch resolves.
+  // Falls back to plain hidden toggles if GSAP failed to load (offline CDN).
+  const gsapOk = () => typeof window !== 'undefined' && !!window.gsap;
+  function revealContent() {
+    if (!gsapOk()) return;
+    const targets = $('songInfoModal')
+      .querySelectorAll('.songinfo-section:not([hidden]), .songinfo-empty:not([hidden]) > *, .songinfo-reddit');
+    if (!targets.length) return;
+    window.gsap.from(targets, {
+      y: 10,
+      autoAlpha: 0,
+      duration: 0.42,
+      ease: 'power3.out',
+      stagger: 0.07,
+    });
+  }
+  function openSongInfoModal(song) {
+    if (!song) return;
+    songInfoController?.abort();
+    songInfoController = new AbortController();
+    const artist = song.artist || '';
+    const title = song.title || song.query || '';
+    const redditUrl = buildRedditUrl(artist, title);
+    $('songInfoReddit').href = redditUrl;
+    $('songInfoRedditFallback').href = redditUrl;
+    $('songInfoLoading').hidden = false;
+    $('songInfoBody').hidden = true;
+    $('songInfoEmpty').hidden = true;
+    $('songInfoArtistSection').hidden = true;
+    $('songInfoTrackSection').hidden = true;
+    const modal = $('songInfoModal');
+    modal.hidden = false;
+    if (gsapOk()) {
+      const card = modal.querySelector('.modal-card');
+      window.gsap.fromTo(modal,
+        { autoAlpha: 0 },
+        { autoAlpha: 1, duration: 0.18, ease: 'power1.out' });
+      window.gsap.fromTo(card,
+        { y: 24, autoAlpha: 0, scale: 0.97 },
+        { y: 0, autoAlpha: 1, scale: 1, duration: 0.36, ease: 'expo.out', delay: 0.04 });
+    }
+    const params = new URLSearchParams({ artist, title });
+    fetch(`/api/song-info?${params.toString()}`, { signal: songInfoController.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        $('songInfoLoading').hidden = true;
+        if (!data || (!data.artist && !data.song)) {
+          $('songInfoEmpty').hidden = false;
+          revealContent();
+          return;
+        }
+        renderSongInfoSection($('songInfoArtistSection'), 'artist', data.artist);
+        renderSongInfoSection($('songInfoTrackSection'), 'track', data.song);
+        if (data.redditUrl) {
+          $('songInfoReddit').href = data.redditUrl;
+          $('songInfoRedditFallback').href = data.redditUrl;
+        }
+        $('songInfoBody').hidden = false;
+        revealContent();
+      })
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
+        $('songInfoLoading').hidden = true;
+        $('songInfoEmpty').hidden = false;
+        revealContent();
+      });
+  }
+  function closeSongInfoModal() {
+    songInfoController?.abort();
+    songInfoController = null;
+    const modal = $('songInfoModal');
+    if (gsapOk()) {
+      const card = modal.querySelector('.modal-card');
+      window.gsap.to(card, { y: 14, autoAlpha: 0, scale: 0.98, duration: 0.18, ease: 'power2.in' });
+      window.gsap.to(modal, {
+        autoAlpha: 0, duration: 0.18, ease: 'power2.in',
+        onComplete: () => {
+          modal.hidden = true;
+          window.gsap.set(modal, { clearProps: 'all' });
+          window.gsap.set(card, { clearProps: 'all' });
+        },
+      });
+    } else {
+      modal.hidden = true;
+    }
+  }
+  $('songInfoClose').addEventListener('click', closeSongInfoModal);
+  $('songInfoModal').addEventListener('click', (e) => {
+    if (e.target.id === 'songInfoModal') closeSongInfoModal();
   });
 
   let codeValidateTimer = null;

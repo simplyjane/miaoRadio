@@ -1035,3 +1035,101 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   .account-email { font-size: 12px; }
   .account-out { padding: 6px 10px; font-size: 9px; }
 }
+
+/* ─── SONG INFO MODAL ─────────────────────────────────────────────────────
+   Wikipedia summary popup that opens when a queue row is tapped. The
+   thumbnail + serif-italic name + mono "ARTIST/TRACK" label echo the
+   broadcast-station typography from the existing settings modal. */
+.songinfo-card { max-width: 480px; max-height: 92vh; overflow-y: auto; }
+
+.songinfo-loading {
+  display: flex; align-items: center; gap: 12px;
+  padding: 22px 14px;
+  margin: 14px 0 6px;
+  border: 1px dashed var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+}
+.songinfo-loading[hidden] { display: none; }
+.songinfo-tick {
+  width: 8px; height: 8px; background: currentColor; border-radius: 50%;
+  box-shadow: 0 0 0 4px var(--accent-dim);
+  animation: account-pulse 1.4s ease-in-out infinite;
+}
+
+.songinfo-section {
+  margin: 4px 0 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px dotted var(--line-bright);
+}
+.songinfo-section:last-of-type { border-bottom: 0; padding-bottom: 6px; }
+.songinfo-section-head {
+  display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px;
+}
+.songinfo-section-label {
+  font-family: var(--font-mono); font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.28em; text-transform: uppercase;
+}
+.songinfo-section-name {
+  font-family: var(--font-serif); font-style: italic;
+  font-size: 22px; line-height: 1.2; color: var(--text);
+}
+.songinfo-section-body {
+  display: grid; grid-template-columns: 92px 1fr; gap: 16px; align-items: start;
+}
+.songinfo-section-body:not(:has(.songinfo-thumb)) {
+  grid-template-columns: 1fr;
+}
+.songinfo-thumb {
+  width: 92px; height: 92px;
+  object-fit: cover;
+  border: 1px solid var(--line-bright);
+  background: var(--bg);
+}
+.songinfo-summary {
+  font-family: var(--font-serif);
+  font-size: 14px; line-height: 1.6;
+  color: var(--text);
+  word-break: break-word;
+}
+.songinfo-wiki {
+  display: inline-block;
+  margin-top: 12px;
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--accent); text-decoration: none;
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 1px;
+}
+.songinfo-wiki:hover { color: var(--text); }
+
+.songinfo-reddit {
+  display: block; margin-top: 20px;
+  padding: 10px 14px; text-align: center;
+  border: 1px dashed var(--line-bright);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  text-decoration: none;
+  transition: color .15s ease, border-color .15s ease;
+}
+.songinfo-reddit:hover { color: var(--accent); border-color: var(--accent); }
+
+.songinfo-empty {
+  padding: 20px 0 6px; text-align: center;
+}
+.songinfo-empty[hidden] { display: none; }
+.songinfo-empty-text {
+  font-family: var(--font-serif); font-style: italic;
+  font-size: 15px; line-height: 1.5;
+  color: var(--text-dim);
+  margin-bottom: 18px;
+}
+
+/* The whole row is now a clickable affordance. CSS cursor hint;
+   the actual "indent on hover" motion is driven by GSAP in app.js. */
+.queue li:not(.queue-empty):not(.queue-skeleton) { cursor: pointer; }

@@ -196,6 +196,28 @@
     </div>
   </div>
 
+  <div class="modal" id="songInfoModal" hidden>
+    <div class="modal-card songinfo-card">
+      <header class="modal-head">
+        <span class="modal-title" id="songInfoTitle" data-i18n="song_info_title">SONG INFO</span>
+        <button class="modal-close" id="songInfoClose" type="button" aria-label="Close">×</button>
+      </header>
+      <div class="songinfo-loading" id="songInfoLoading">
+        <span class="songinfo-tick"></span>
+        <span class="songinfo-loading-label" data-i18n="song_info_loading">SEARCHING WIKIPEDIA…</span>
+      </div>
+      <div class="songinfo-body" id="songInfoBody" hidden>
+        <section class="songinfo-section" id="songInfoArtistSection" hidden></section>
+        <section class="songinfo-section" id="songInfoTrackSection" hidden></section>
+        <a class="songinfo-reddit" id="songInfoReddit" target="_blank" rel="noopener" data-i18n="song_info_reddit">DISCUSS ON REDDIT ↗</a>
+      </div>
+      <div class="songinfo-empty" id="songInfoEmpty" hidden>
+        <p class="songinfo-empty-text" data-i18n="song_info_empty">No Wikipedia entry found. Try searching the community instead.</p>
+        <a class="songinfo-reddit" id="songInfoRedditFallback" target="_blank" rel="noopener" data-i18n="song_info_reddit">DISCUSS ON REDDIT ↗</a>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="loginModal" hidden>
     <div class="modal-card">
       <header class="modal-head">
@@ -221,6 +243,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="app.js"></script>
 </body>

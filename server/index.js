@@ -4,6 +4,7 @@ import { handleChat, handleAutoShow, getPendingPatter } from './router.js';
 import { searchSongs } from './ytmusic.js';
 import { synthesizeAndCache } from './tts.js';
 import { lookupCityForIp } from './geo.js';
+import { getSongInfo } from './wiki.js';
 import {
   recordPlay,
   getCorpus,
@@ -297,6 +298,22 @@ app.post('/api/played', (req, res) => {
   }
   recordPlay({ videoId, title, artist, query, userId: user.id });
   res.json({ ok: true });
+});
+
+// Public — guests can browse song info too. No auth gate.
+app.get('/api/song-info', async (req, res) => {
+  const artist = String(req.query.artist ?? '').trim();
+  const title = String(req.query.title ?? '').trim();
+  if (!artist && !title) {
+    return res.status(400).json({ error: 'artist or title required' });
+  }
+  try {
+    const info = await getSongInfo({ artist, title });
+    res.json(info);
+  } catch (e) {
+    console.warn('[song-info]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/api/search', async (req, res) => {
