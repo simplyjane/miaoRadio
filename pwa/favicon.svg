@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <style>
+    .body { fill: #14140f; }
+    .eye  { fill: #14140f; }
+    .glint{ fill: #ffffff; }
+    .pink { fill: #ff7fac; }
+    @media (prefers-color-scheme: dark) {
+      .body { fill: #5dffa1; }
+      .eye  { fill: #050505; }
+      .glint{ fill: #ffffff; }
+    }
+  </style>
+  <!-- Ears (rounded chibi triangles) -->
+  <path class="body" d="M 13 22 Q 8 4 24 16 L 22 26 Z"/>
+  <path class="body" d="M 51 22 Q 56 4 40 16 L 42 26 Z"/>
+  <!-- Head -->
+  <ellipse class="body" cx="32" cy="36" rx="23" ry="21"/>
+  <!-- Big eyes -->
+  <ellipse class="eye" cx="22" cy="36" rx="4" ry="5.5"/>
+  <ellipse class="eye" cx="42" cy="36" rx="4" ry="5.5"/>
+  <!-- Sparkle highlights -->
+  <ellipse class="glint" cx="23.5" cy="33.5" rx="1.6" ry="2"/>
+  <ellipse class="glint" cx="43.5" cy="33.5" rx="1.6" ry="2"/>
+  <!-- Heart nose -->
+  <path class="pink" d="M 32 44 Q 29.5 41.8 28 44 Q 28 46.5 32 49 Q 36 46.5 36 44 Q 34.5 41.8 32 44 Z"/>
+  <!-- :3 mouth -->
+  <path d="M 32 49 Q 28.5 52 26 50 M 32 49 Q 35.5 52 38 50"
+        fill="none" stroke="#ff7fac" stroke-width="1.6" stroke-linecap="round"/>
+</svg>
