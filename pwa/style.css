@@ -1268,3 +1268,20 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
 /* The whole row is now a clickable affordance. CSS cursor hint;
    the actual "indent on hover" motion is driven by GSAP in app.js. */
 .queue li:not(.queue-empty):not(.queue-skeleton) { cursor: pointer; }
+
+/* track section: artist subtitle below the title, then album · duration */
+.songinfo-section-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.songinfo-section-text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.songinfo-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}

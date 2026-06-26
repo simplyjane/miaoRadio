@@ -886,11 +886,12 @@
     const q = [artist, title].filter(Boolean).join(' ');
     return `https://www.reddit.com/search/?q=${encodeURIComponent(q)}`;
   }
-  function renderSongInfoSection(el, kind, item) {
+  // Artist section — Wikipedia-only; hides if Wikipedia has no entry.
+  function renderArtistSection(el, item) {
     if (!item) { el.hidden = true; el.innerHTML = ''; return; }
     el.hidden = false;
     const wikiLabel = t('song_info_wikipedia');
-    const sectionLabel = t(kind === 'artist' ? 'song_info_artist' : 'song_info_track');
+    const sectionLabel = t('song_info_artist');
     const thumb = item.thumbnail
       ? `<img class="songinfo-thumb" src="${esc(item.thumbnail)}" alt="" loading="lazy">`
       : '';
@@ -900,11 +901,51 @@
     el.innerHTML = `
       <header class="songinfo-section-head">
         <span class="songinfo-section-label">${esc(sectionLabel)}</span>
-        <span class="songinfo-section-name">${esc(item.name || item.title || '')}</span>
+        <span class="songinfo-section-name">${esc(item.name || '')}</span>
       </header>
       <div class="songinfo-section-body">
         ${thumb}
         <p class="songinfo-summary">${esc(item.summary || '')}</p>
+      </div>
+      ${wikiLink}
+    `;
+  }
+
+  // Track section — ALWAYS shows. Built from the local YT Music metadata
+  // (title, artist, album, duration, thumbnail) so the user sees real info
+  // even when Wikipedia has no page for the specific song. Wikipedia data,
+  // if present, is layered on top as a summary paragraph + link.
+  function renderTrackSection(el, song, wiki) {
+    el.hidden = false;
+    const sectionLabel = t('song_info_track');
+    const thumbSrc = wiki?.thumbnail || song.thumbnail || null;
+    const thumb = thumbSrc
+      ? `<img class="songinfo-thumb" src="${esc(thumbSrc)}" alt="" loading="lazy">`
+      : '';
+    const metaBits = [];
+    if (song.album) metaBits.push(esc(song.album));
+    if (song.duration) metaBits.push(esc(song.duration));
+    const metaLine = metaBits.length
+      ? `<p class="songinfo-meta">${metaBits.join(' · ')}</p>`
+      : '';
+    const summary = wiki?.summary
+      ? `<p class="songinfo-summary">${esc(wiki.summary)}</p>`
+      : '';
+    const wikiLink = wiki?.wikiUrl
+      ? `<a class="songinfo-wiki" href="${esc(wiki.wikiUrl)}" target="_blank" rel="noopener">${esc(t('song_info_wikipedia'))}</a>`
+      : '';
+    el.innerHTML = `
+      <header class="songinfo-section-head">
+        <span class="songinfo-section-label">${esc(sectionLabel)}</span>
+        <span class="songinfo-section-name">${esc(song.title || song.query || '?')}</span>
+        ${song.artist ? `<span class="songinfo-section-sub">${esc(song.artist)}</span>` : ''}
+      </header>
+      <div class="songinfo-section-body">
+        ${thumb}
+        <div class="songinfo-section-text">
+          ${metaLine}
+          ${summary}
+        </div>
       </div>
       ${wikiLink}
     `;
@@ -951,30 +992,31 @@
         { y: 24, autoAlpha: 0, scale: 0.97 },
         { y: 0, autoAlpha: 1, scale: 1, duration: 0.36, ease: 'expo.out', delay: 0.04 });
     }
+    // Render the track section IMMEDIATELY using local YT Music metadata —
+    // no waiting for Wikipedia. That way the title, album, duration and
+    // thumbnail are on screen the moment the modal opens. We then layer
+    // Wikipedia content on top when the fetch resolves.
+    renderTrackSection($('songInfoTrackSection'), song, null);
+    $('songInfoBody').hidden = false;
+    $('songInfoLoading').hidden = false; // still loading artist info
+
     const params = new URLSearchParams({ artist, title });
     fetch(`/api/song-info?${params.toString()}`, { signal: songInfoController.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         $('songInfoLoading').hidden = true;
-        if (!data || (!data.artist && !data.song)) {
-          $('songInfoEmpty').hidden = false;
-          revealContent();
-          return;
-        }
-        renderSongInfoSection($('songInfoArtistSection'), 'artist', data.artist);
-        renderSongInfoSection($('songInfoTrackSection'), 'track', data.song);
-        if (data.redditUrl) {
+        renderArtistSection($('songInfoArtistSection'), data?.artist || null);
+        renderTrackSection($('songInfoTrackSection'), song, data?.song || null);
+        if (data?.redditUrl) {
           $('songInfoReddit').href = data.redditUrl;
           $('songInfoRedditFallback').href = data.redditUrl;
         }
-        $('songInfoBody').hidden = false;
         revealContent();
       })
       .catch((err) => {
         if (err.name === 'AbortError') return;
         $('songInfoLoading').hidden = true;
-        $('songInfoEmpty').hidden = false;
-        revealContent();
+        // Track section already on screen with local data; nothing to do.
       });
   }
   function closeSongInfoModal() {
