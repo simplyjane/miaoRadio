@@ -699,8 +699,86 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   background: var(--text-faint);
 }
 .avatar::before { top: -1px; left: -1px; box-shadow: 56px 0 0 var(--text-faint), 0 64px 0 var(--text-faint), 56px 64px 0 var(--text-faint); }
-.avatar svg { width: 42px; height: 42px; }
-.avatar svg .eye { fill: var(--bg); }
+.avatar svg.kitty { width: 52px; height: 52px; }
+
+/* ─── CUTE KITTY DJ AVATAR ──────────────────────────────────────────────
+   Idle motion is pure CSS (breathing, blinking, ear twitch). The mouth
+   open/close animation is driven by GSAP only while DJ patter is
+   audibly playing — fires for a few seconds, then stops. */
+:root { --kitty-pink: #ff8fb3; }
+[data-theme="light"] { --kitty-pink: #c84a72; }
+
+.avatar svg.kitty .kitty-pink   { fill: var(--kitty-pink); }
+.avatar svg.kitty .kitty-blush  { fill: var(--kitty-pink); opacity: 0.45; }
+.avatar svg.kitty .kitty-nose   { fill: var(--kitty-pink); }
+.avatar svg.kitty .kitty-mouth  { stroke: var(--kitty-pink); stroke-width: 1; stroke-linecap: round; }
+.avatar svg.kitty .kitty-eyeball{ fill: var(--bg); }
+.avatar svg.kitty .kitty-sparkle{ fill: var(--text); opacity: 0.9; }
+.avatar svg.kitty .kitty-whiskers line {
+  stroke: currentColor; stroke-width: 0.5; opacity: 0.5;
+}
+
+/* Slow breathing — the whole kitty scales gently on the body. */
+.avatar svg.kitty {
+  animation: kitty-breath 3.4s ease-in-out infinite;
+  transform-origin: 50% 60%;
+}
+@keyframes kitty-breath {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.035); }
+}
+
+/* Blink — eyes flatten to a line for 130ms every ~5s. Each eye gets a
+   slight stagger so it feels organic, not synced. */
+.avatar svg.kitty .kitty-eye {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: kitty-blink 5.2s steps(1, end) infinite;
+}
+.avatar svg.kitty .eye-right { animation-delay: 0.05s; }
+@keyframes kitty-blink {
+  0%, 92%, 100%   { transform: scaleY(1); }
+  94%, 97%        { transform: scaleY(0.1); }
+}
+
+/* Ear twitch — rare, one ear at a time, asymmetric durations so the
+   pattern never visibly repeats. transform on <g> via fill-box. */
+.avatar svg.kitty .kitty-ear {
+  transform-box: fill-box;
+}
+.avatar svg.kitty .ear-left  { transform-origin: 18px 18px; animation: kitty-twitch-L 9.3s ease-in-out infinite; }
+.avatar svg.kitty .ear-right { transform-origin: 42px 18px; animation: kitty-twitch-R 11.7s ease-in-out infinite; }
+@keyframes kitty-twitch-L {
+  0%, 88%, 100%   { transform: rotate(0); }
+  91%             { transform: rotate(-8deg); }
+  94%             { transform: rotate(3deg); }
+  97%             { transform: rotate(-2deg); }
+}
+@keyframes kitty-twitch-R {
+  0%, 85%, 100%   { transform: rotate(0); }
+  88%             { transform: rotate(7deg); }
+  91%             { transform: rotate(-3deg); }
+  95%             { transform: rotate(2deg); }
+}
+
+/* Talking — the .talking class is toggled by JS while DJ patter plays.
+   The mouth scales open/closed; pure transform = GPU-cheap. */
+.avatar.talking svg.kitty .kitty-mouth-group {
+  transform-origin: 30px 41px;
+  transform-box: fill-box;
+  animation: kitty-talk 0.32s ease-in-out infinite;
+}
+@keyframes kitty-talk {
+  0%, 100% { transform: scaleY(1); }
+  50%      { transform: scaleY(1.8) translateY(1px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar svg.kitty,
+  .avatar svg.kitty .kitty-eye,
+  .avatar svg.kitty .kitty-ear,
+  .avatar.talking svg.kitty .kitty-mouth-group { animation: none; }
+}
 
 .dj-msg { min-width: 0; }
 .dj-tag {

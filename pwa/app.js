@@ -1504,12 +1504,23 @@
   function playDjPatter(url) {
     return new Promise((resolve) => {
       const audio = $('djAudio');
+      const avatar = $('djAvatar');
       audio.src = url;
+      // The kitty's mouth animates only while the patter is audibly
+      // playing — CSS does the actual scaleY keyframe; we just toggle
+      // the class via the audio element's lifecycle.
+      const showTalk = () => avatar?.classList.add('talking');
+      const hideTalk = () => avatar?.classList.remove('talking');
       const done = () => {
+        hideTalk();
+        audio.removeEventListener('playing', showTalk);
+        audio.removeEventListener('pause', hideTalk);
         audio.removeEventListener('ended', done);
         audio.removeEventListener('error', done);
         resolve();
       };
+      audio.addEventListener('playing', showTalk);
+      audio.addEventListener('pause', hideTalk);
       audio.addEventListener('ended', done);
       audio.addEventListener('error', done);
       audio.play().catch(() => done());
