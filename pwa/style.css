@@ -169,18 +169,153 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   background-size: 12px 12px, auto, auto, auto, auto;
   background-position: 0 0, top left, top right, bottom left, bottom right;
 }
-.hero-shader {
+/* ─── OLD-RADIO FACE (replaces WebGL shader) ──────────────────────────────
+   Pure CSS + tiny SVG: a vintage FM tuning dial across the top, two
+   semicircular VU meters in the bottom corners, soft amber tube-glow,
+   subtle horizontal scanlines. All motion is GPU-friendly (transforms +
+   background-position) at slow cadences so phones don't strain. */
+:root {
+  --radio-amber:    #ff9a3c;
+  --radio-amber-d:  #b86a1a;
+  --radio-bg-1:     #2a1404;
+  --radio-bg-2:     #0c0703;
+}
+[data-theme="light"] {
+  --radio-amber:    #b85a10;
+  --radio-amber-d:  #82400a;
+  --radio-bg-1:     #e8caa4;
+  --radio-bg-2:     #c08a52;
+}
+
+.radio-face {
   position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  display: block;
   z-index: 0;
   pointer-events: none;
-  /* Light theme makes the dark shader output too dim — invert it. */
+  background:
+    radial-gradient(ellipse at 50% 65%, var(--radio-bg-1) 0%, var(--radio-bg-2) 78%);
+  color: var(--radio-amber);
+  overflow: hidden;
 }
-[data-theme="light"] .hero-shader { filter: invert(1) hue-rotate(180deg); }
+
+.radio-glow {
+  position: absolute;
+  inset: 14% 22%;
+  background: radial-gradient(ellipse at center, var(--radio-amber) 0%, transparent 70%);
+  opacity: 0.18;
+  filter: blur(28px);
+  animation: radio-glow-pulse 6.7s ease-in-out infinite;
+}
+@keyframes radio-glow-pulse {
+  0%, 100% { opacity: 0.18; }
+  50%      { opacity: 0.28; }
+}
+
+/* Tuning dial — horizontal scale across the top of the hero */
+.radio-dial {
+  position: absolute;
+  top: 12px; left: 5%; right: 5%;
+  width: 90%;
+  height: 56px;
+  color: var(--radio-amber);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+}
+.radio-dial .dial-baseline { stroke: currentColor; stroke-width: 0.6; opacity: 0.35; }
+.radio-dial .dial-ticks line { stroke: currentColor; stroke-width: 1.4; }
+.radio-dial .dial-ticks .tick-mid { stroke-width: 0.8; opacity: 0.55; }
+.radio-dial .dial-ticks text {
+  fill: currentColor; font-size: 7px; letter-spacing: 0.1em; opacity: 0.75;
+}
+.radio-dial .dial-band {
+  fill: currentColor; font-size: 6px; letter-spacing: 0.32em;
+  opacity: 0.45; text-transform: uppercase;
+}
+.radio-dial .dial-indicator {
+  filter: drop-shadow(0 0 4px var(--radio-amber));
+  animation: dial-drift 24s ease-in-out infinite alternate;
+  transform: translateX(60px);
+}
+.radio-dial .dial-indicator line { stroke: var(--radio-amber); stroke-width: 1.6; }
+.radio-dial .dial-indicator polygon { fill: var(--radio-amber); }
+@keyframes dial-drift {
+  0%   { transform: translateX(60px); }
+  100% { transform: translateX(700px); }
+}
+
+/* VU meters in the bottom corners */
+.vu-meter {
+  position: absolute; bottom: 12px;
+  width: 78px; height: 56px;
+  color: var(--radio-amber);
+  filter: drop-shadow(0 0 3px rgba(255, 154, 60, 0.25));
+}
+.vu-meter.vu-left  { left: 12px; }
+.vu-meter.vu-right { right: 12px; }
+.vu-arc { stroke: currentColor; stroke-width: 0.8; opacity: 0.45; }
+.vu-ticks line { stroke: currentColor; stroke-width: 0.8; opacity: 0.55; }
+.vu-pivot { fill: currentColor; }
+.vu-label {
+  fill: currentColor; font-family: var(--font-mono); font-size: 5.5px;
+  letter-spacing: 0.18em; opacity: 0.7; text-transform: uppercase;
+}
+.vu-needle {
+  stroke: currentColor; stroke-width: 1.4;
+  transform-origin: 50px 55px;
+  transform-box: fill-box;
+  animation: vu-bob 4.7s cubic-bezier(.55,.05,.45,.95) infinite;
+  filter: drop-shadow(0 0 2px var(--radio-amber));
+}
+.vu-right .vu-needle { animation-duration: 5.3s; animation-delay: -1.7s; }
+@keyframes vu-bob {
+  0%   { transform: rotate(-38deg); }
+  18%  { transform: rotate(12deg); }
+  31%  { transform: rotate(-8deg); }
+  47%  { transform: rotate(28deg); }
+  62%  { transform: rotate(-4deg); }
+  78%  { transform: rotate(20deg); }
+  91%  { transform: rotate(-22deg); }
+  100% { transform: rotate(-38deg); }
+}
+
+/* Subtle CRT scanlines, drifted very slowly. background-position is cheap. */
+.radio-scanlines {
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    rgba(0, 0, 0, 0.12) 2px,
+    rgba(0, 0, 0, 0.12) 3px
+  );
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+  animation: scanline-drift 3.4s linear infinite;
+}
+[data-theme="light"] .radio-scanlines { opacity: 0.18; }
+@keyframes scanline-drift {
+  from { background-position-y: 0; }
+  to   { background-position-y: 3px; }
+}
+
+/* The clock + date + AIR status sit over the warm tube glow */
 .hero > .clock,
 .hero > .date-stack,
 .hero > .air-status { position: relative; z-index: 1; }
+.hero .clock {
+  color: var(--radio-amber);
+  text-shadow: 0 0 14px rgba(255, 154, 60, 0.35);
+}
+[data-theme="light"] .hero .clock { text-shadow: none; }
+.hero .weekday,
+.hero .ymd { color: var(--radio-amber); opacity: 0.88; }
+
+@media (prefers-reduced-motion: reduce) {
+  .radio-glow,
+  .dial-indicator,
+  .vu-needle,
+  .radio-scanlines { animation: none; }
+}
 
 .clock {
   font-family: var(--font-display);

@@ -33,7 +33,59 @@
     </header>
 
     <section class="panel hero" aria-labelledby="clock">
-      <canvas class="hero-shader" id="heroShader" aria-hidden="true"></canvas>
+      <div class="radio-face" aria-hidden="true">
+        <div class="radio-glow"></div>
+        <svg class="radio-dial" viewBox="0 0 800 60" preserveAspectRatio="none">
+          <line class="dial-baseline" x1="40" y1="38" x2="760" y2="38"/>
+          <g class="dial-ticks">
+            <g><line x1="60" y1="26" x2="60" y2="50"/><text x="60" y="60" text-anchor="middle">88</text></g>
+            <g><line x1="130" y1="28" x2="130" y2="48" class="tick-mid"/></g>
+            <g><line x1="200" y1="26" x2="200" y2="50"/><text x="200" y="60" text-anchor="middle">92</text></g>
+            <g><line x1="270" y1="28" x2="270" y2="48" class="tick-mid"/></g>
+            <g><line x1="340" y1="26" x2="340" y2="50"/><text x="340" y="60" text-anchor="middle">96</text></g>
+            <g><line x1="410" y1="28" x2="410" y2="48" class="tick-mid"/></g>
+            <g><line x1="480" y1="26" x2="480" y2="50"/><text x="480" y="60" text-anchor="middle">100</text></g>
+            <g><line x1="550" y1="28" x2="550" y2="48" class="tick-mid"/></g>
+            <g><line x1="620" y1="26" x2="620" y2="50"/><text x="620" y="60" text-anchor="middle">104</text></g>
+            <g><line x1="690" y1="28" x2="690" y2="48" class="tick-mid"/></g>
+            <g><line x1="760" y1="26" x2="760" y2="50"/><text x="760" y="60" text-anchor="middle">108</text></g>
+          </g>
+          <g class="dial-indicator">
+            <line x1="0" y1="20" x2="0" y2="56"/>
+            <polygon points="-5,16 5,16 0,24"/>
+          </g>
+          <text class="dial-band" x="400" y="14" text-anchor="middle">MHz · FM</text>
+        </svg>
+        <svg class="vu-meter vu-left" viewBox="0 0 100 70" preserveAspectRatio="xMidYMid meet">
+          <path class="vu-arc" d="M 12 55 A 38 38 0 0 1 88 55" fill="none"/>
+          <g class="vu-ticks">
+            <line x1="12" y1="55" x2="15" y2="50"/>
+            <line x1="20" y1="35" x2="23" y2="33"/>
+            <line x1="38" y1="22" x2="40" y2="25"/>
+            <line x1="60" y1="22" x2="62" y2="25"/>
+            <line x1="78" y1="35" x2="80" y2="33"/>
+            <line x1="85" y1="50" x2="88" y2="55"/>
+          </g>
+          <line class="vu-needle" x1="50" y1="55" x2="50" y2="20"/>
+          <circle class="vu-pivot" cx="50" cy="55" r="3"/>
+          <text class="vu-label" x="50" y="68" text-anchor="middle">VU · L</text>
+        </svg>
+        <svg class="vu-meter vu-right" viewBox="0 0 100 70" preserveAspectRatio="xMidYMid meet">
+          <path class="vu-arc" d="M 12 55 A 38 38 0 0 1 88 55" fill="none"/>
+          <g class="vu-ticks">
+            <line x1="12" y1="55" x2="15" y2="50"/>
+            <line x1="20" y1="35" x2="23" y2="33"/>
+            <line x1="38" y1="22" x2="40" y2="25"/>
+            <line x1="60" y1="22" x2="62" y2="25"/>
+            <line x1="78" y1="35" x2="80" y2="33"/>
+            <line x1="85" y1="50" x2="88" y2="55"/>
+          </g>
+          <line class="vu-needle" x1="50" y1="55" x2="50" y2="20"/>
+          <circle class="vu-pivot" cx="50" cy="55" r="3"/>
+          <text class="vu-label" x="50" y="68" text-anchor="middle">VU · R</text>
+        </svg>
+        <div class="radio-scanlines"></div>
+      </div>
       <div class="clock" id="clock">--:--</div>
       <div class="date-stack">
         <div class="weekday" id="weekday">—</div>
