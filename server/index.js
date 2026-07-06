@@ -320,18 +320,14 @@ app.post('/api/played', (req, res) => {
   res.json({ ok: true });
 });
 
-// Country-scoped starter queue for cold page loads. Aggregates the top plays
-// from the last 30 days for the caller's country; falls back to global top,
-// then to a hardcoded singleton when the DB is still empty. Cached in-memory
-// per country for 6 hours — the underlying data changes slowly and we don't
-// need it fresher than that.
-const PRESET_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+// Country-scoped starter queue for cold page loads. All backing queries are
+// indexed lookups (sub-ms), so no cache — the moment the chart scheduler
+// writes fresh data, callers see it. Simplicity > premature optimization.
 const PRESET_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const PRESET_LIMIT = 8;
 const HARD_FALLBACK_PRESET = [
   { videoId: '1OZDaRhHHyM', title: 'Merry Christmas Mr. Lawrence', artist: 'Ryuichi Sakamoto', duration: '4:49' },
 ];
-const presetCache = new Map(); // key: country || '__global__' → { at, tracks }
 
 function computePreset(country) {
   // Preference order:
@@ -385,14 +381,8 @@ app.get('/api/preset', async (req, res) => {
     const geo = await lookupCityForIp(req.ip).catch(() => null);
     country = geo?.country || null;
   }
-  const cacheKey = country || '__global__';
-  const hit = presetCache.get(cacheKey);
-  if (hit && Date.now() - hit.at < PRESET_CACHE_TTL_MS) {
-    return res.json({ country, tracks: hit.tracks, source: hit.source, cached: true });
-  }
   const { tracks, source } = computePreset(country);
-  presetCache.set(cacheKey, { at: Date.now(), tracks, source });
-  res.json({ country, tracks, source, cached: false });
+  res.json({ country, tracks, source });
 });
 
 // Public — guests can browse song info too. No auth gate.
