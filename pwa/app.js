@@ -74,6 +74,18 @@
       tap_hint_primary: 'TAP ANYWHERE TO START',
       tap_hint_secondary: 'your browser needs one click before it can play audio',
       preset_welcome: "Warming up the airwaves… tap anywhere to start.",
+      // Time-of-day pieces
+      tod_morning:   'Good morning',
+      tod_afternoon: 'Good afternoon',
+      tod_evening:   'Good evening',
+      tod_night:     'Late night',
+      // Greeting templates — {tod} = time of day, {place} = " from Toronto" or ""
+      greet_1: "{tod}{place} — warming up the airwaves. Tap anywhere to tune in.",
+      greet_2: "{tod}{place}. The station is spinning up — one tap to play.",
+      greet_3: "{tod}{place}. Radio waves incoming. Tap to catch them.",
+      greet_4: "{tod}{place}. Music warming up on the wire. Tap when you're ready.",
+      greet_5: "{tod}{place}. This is miaoRadio, live. Tap to open the signal.",
+      greet_from: " from {city}",
       dj_voice: 'DJ VOICE',
       voice_help: 'Pick the voice the DJ uses between tracks.',
       voice_default: 'System default',
@@ -165,6 +177,16 @@
       tap_hint_primary: 'TOUCHEZ POUR DÉMARRER',
       tap_hint_secondary: "votre navigateur exige un clic avant de pouvoir jouer",
       preset_welcome: "Je chauffe la station… touchez pour démarrer.",
+      tod_morning:   'Bon matin',
+      tod_afternoon: 'Bon après-midi',
+      tod_evening:   'Bonsoir',
+      tod_night:     'Nuit tardive',
+      greet_1: "{tod}{place} — je chauffe les ondes. Touchez pour vous connecter.",
+      greet_2: "{tod}{place}. La station démarre — un toucher pour jouer.",
+      greet_3: "{tod}{place}. Les ondes arrivent. Touchez pour les capter.",
+      greet_4: "{tod}{place}. La musique se prépare. Touchez quand vous voulez.",
+      greet_5: "{tod}{place}. Ici miaoRadio, en direct. Touchez pour ouvrir le signal.",
+      greet_from: " depuis {city}",
       dj_voice: 'VOIX DU DJ',
       voice_help: 'Choisissez la voix que le DJ utilise entre les titres.',
       voice_default: 'Voix par défaut',
@@ -795,6 +817,22 @@
       }));
     } catch {}
   }
+  // A time-of-day + city aware DJ-style greeting for cold visitors.
+  function buildGreeting(city) {
+    const h = new Date().getHours();
+    let todKey;
+    if (h < 5)       todKey = 'tod_night';
+    else if (h < 12) todKey = 'tod_morning';
+    else if (h < 17) todKey = 'tod_afternoon';
+    else if (h < 21) todKey = 'tod_evening';
+    else             todKey = 'tod_night';
+    const tod = t(todKey);
+    const place = city ? t('greet_from', { city }) : '';
+    // Rotate through 5 variations so cold reloads feel fresh, not scripted.
+    const bucket = 1 + Math.floor(Math.random() * 5);
+    return t(`greet_${bucket}`, { tod, place });
+  }
+
   function showInitialQueue() {
     // Fired before any API round-trip. Cached takes priority (fresher and
     // personalized); country-scoped top hits come from /api/preset; the
@@ -816,7 +854,9 @@
     state.queue = FALLBACK_PRESET;
     state.idx = 0;
     renderQueue();
-    setDjText(t('preset_welcome'), false);
+    // Immediate greeting from browser time; upgrades to city-aware once
+    // /api/preset returns the caller's resolved location.
+    setDjText(buildGreeting(null), false);
     setNowState(t('idle'));
     if (!userActivated) $('tapHint').hidden = false;
     fetch('/api/preset', { credentials: 'same-origin' })
@@ -830,6 +870,9 @@
         state.queue = data.tracks;
         state.idx = 0;
         renderQueue();
+        // Refresh the greeting now that we know the city — same slot as
+        // the first paint, so it feels like it deepens rather than resets.
+        setDjText(buildGreeting(data.city), false);
       })
       .catch((err) => console.warn('[preset]', err));
   }

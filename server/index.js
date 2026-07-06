@@ -370,19 +370,23 @@ function computePreset(country) {
 }
 
 app.get('/api/preset', async (req, res) => {
-  // Country attribution: if the caller is signed-in or has a session with a
-  // known country in user_settings, use that. Otherwise do a fresh IP lookup.
+  // Country + city attribution: prefer the caller's saved settings; fall
+  // back to a fresh IP lookup for pure anonymous callers.
   let country = null;
+  let city = null;
   const user = resolveUser(req, res);
   if (user) {
-    country = getSettings(user.id)?.country_code || null;
+    const s = getSettings(user.id);
+    country = s?.country_code || null;
+    city = s?.weather_city || null;
   }
-  if (!country) {
+  if (!country || !city) {
     const geo = await lookupCityForIp(req.ip).catch(() => null);
-    country = geo?.country || null;
+    country ||= geo?.country || null;
+    city ||= geo?.city || null;
   }
   const { tracks, source } = computePreset(country);
-  res.json({ country, tracks, source });
+  res.json({ country, city, tracks, source });
 });
 
 // Public — guests can browse song info too. No auth gate.
