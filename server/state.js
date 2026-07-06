@@ -85,6 +85,18 @@ db.exec(`
     PRIMARY KEY (user_id, video_id)
   );
   CREATE INDEX IF NOT EXISTS idx_song_reactions_user_rxn ON song_reactions(user_id, reaction);
+
+  CREATE TABLE IF NOT EXISTS chart_snapshots (
+    country     TEXT NOT NULL,        -- ISO country code, e.g. "US"
+    month       TEXT NOT NULL,        -- "YYYY-MM" — snapshot bucket
+    video_id    TEXT NOT NULL,        -- resolved YouTube videoId
+    title       TEXT,
+    artist      TEXT,
+    rank        INTEGER,              -- 1..N from Apple charts
+    snapshot_ts INTEGER NOT NULL,
+    PRIMARY KEY (country, month, video_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_chart_country_month_rank ON chart_snapshots(country, month, rank);
 `);
 
 // One-shot column adds for the messages/plays tables (idempotent).
@@ -335,6 +347,48 @@ export function getTopPlaysByCountry(country, sinceTs, limit = 8) {
 }
 export function getTopPlaysGlobal(sinceTs, limit = 8) {
   return stmtTopPlaysGlobal.all(sinceTs, limit);
+}
+
+/* ───── monthly chart snapshots (Apple → YT) ────────────────────────── */
+
+const stmtInsertChartSnapshot = db.prepare(`
+  INSERT INTO chart_snapshots (country, month, video_id, title, artist, rank, snapshot_ts)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(country, month, video_id) DO UPDATE SET
+    title       = excluded.title,
+    artist      = excluded.artist,
+    rank        = excluded.rank,
+    snapshot_ts = excluded.snapshot_ts
+`);
+const stmtHasChartsForMonth = db.prepare(
+  `SELECT COUNT(*) AS c FROM chart_snapshots WHERE country = ? AND month = ?`,
+);
+const stmtGetChartsForCountryMonth = db.prepare(`
+  SELECT video_id, title, artist, rank
+  FROM chart_snapshots
+  WHERE country = ? AND month = ?
+  ORDER BY rank ASC
+`);
+const stmtDistinctUserCountries = db.prepare(
+  `SELECT DISTINCT country_code AS c FROM user_settings WHERE country_code IS NOT NULL`,
+);
+
+export function insertChartSnapshot({ country, month, videoId, title, artist, rank }) {
+  if (!country || !month || !videoId) return;
+  stmtInsertChartSnapshot.run(
+    country, month, videoId,
+    title || null, artist || null, rank || 0,
+    Date.now(),
+  );
+}
+export function hasChartsForMonth(country, month) {
+  return stmtHasChartsForMonth.get(country, month).c > 0;
+}
+export function getChartsForCountryMonth(country, month, limit = 10) {
+  return stmtGetChartsForCountryMonth.all(country, month).slice(0, limit);
+}
+export function getDistinctUserCountries() {
+  return stmtDistinctUserCountries.all().map((r) => r.c);
 }
 
 /* ───── per-user Google tokens (Calendar) ──────────────────────────────── */

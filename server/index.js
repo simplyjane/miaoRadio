@@ -14,11 +14,13 @@ import {
   setUserCountry,
   getTopPlaysByCountry,
   getTopPlaysGlobal,
+  getChartsForCountryMonth,
   getGoogleTokens,
   deleteGoogleTokens,
   setReaction,
   listReactions,
 } from './state.js';
+import { startChartsScheduler, currentMonthKey } from './charts.js';
 import {
   resolveUser,
   publicUserShape,
@@ -332,19 +334,43 @@ const HARD_FALLBACK_PRESET = [
 const presetCache = new Map(); // key: country || '__global__' → { at, tracks }
 
 function computePreset(country) {
+  // Preference order:
+  //   1. This month's Apple-derived chart snapshot for the caller's country.
+  //   2. Country top plays over the last 30 days (from our own listens).
+  //   3. Global top plays (last 30 days across everyone).
+  //   4. Hardcoded singleton if the DB has nothing at all.
+  if (country) {
+    const chart = getChartsForCountryMonth(country, currentMonthKey(), PRESET_LIMIT);
+    if (chart.length >= 3) {
+      return {
+        tracks: chart.map((r) => ({
+          videoId: r.video_id,
+          title: r.title || '?',
+          artist: r.artist || '',
+          rank: r.rank,
+        })),
+        source: 'chart',
+      };
+    }
+  }
   const sinceTs = Date.now() - PRESET_WINDOW_MS;
   const countryHits = country ? getTopPlaysByCountry(country, sinceTs, PRESET_LIMIT) : [];
   const globalHits = countryHits.length >= 3
     ? []
     : getTopPlaysGlobal(sinceTs, PRESET_LIMIT);
   const raw = countryHits.length >= 3 ? countryHits : globalHits;
-  const tracks = raw.map((r) => ({
-    videoId: r.video_id,
-    title: r.title || '?',
-    artist: r.artist || '',
-    playCount: r.play_count,
-  }));
-  return tracks.length ? tracks : HARD_FALLBACK_PRESET;
+  if (raw.length) {
+    return {
+      tracks: raw.map((r) => ({
+        videoId: r.video_id,
+        title: r.title || '?',
+        artist: r.artist || '',
+        playCount: r.play_count,
+      })),
+      source: countryHits.length >= 3 ? 'plays_country' : 'plays_global',
+    };
+  }
+  return { tracks: HARD_FALLBACK_PRESET, source: 'fallback' };
 }
 
 app.get('/api/preset', async (req, res) => {
@@ -364,10 +390,7 @@ app.get('/api/preset', async (req, res) => {
   if (hit && Date.now() - hit.at < PRESET_CACHE_TTL_MS) {
     return res.json({ country, tracks: hit.tracks, source: hit.source, cached: true });
   }
-  const tracks = computePreset(country);
-  const source = tracks === HARD_FALLBACK_PRESET
-    ? 'fallback'
-    : (country && tracks.length >= 3 ? 'country' : 'global');
+  const { tracks, source } = computePreset(country);
   presetCache.set(cacheKey, { at: Date.now(), tracks, source });
   res.json({ country, tracks, source, cached: false });
 });
@@ -404,6 +427,10 @@ app.listen(PORT, () => {
   // Warm cold caches so the first real chat doesn't pay 60+ seconds for
   // Innertube to bootstrap. Fire and forget — failures don't block serving.
   warmup();
+  // Kicks off the monthly chart-snapshot self-healer: check on boot, then
+  // re-check every 24h. Fetches Apple's country RSS + resolves each track
+  // to a videoId via our YT search. Idempotent — same-month reruns skip.
+  startChartsScheduler();
 });
 
 async function warmup() {
