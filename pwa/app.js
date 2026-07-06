@@ -9,6 +9,7 @@
     user: null,           // null | { id, email, name, picture, isGuest, chatsUsed, chatsLimit }
     reactions: new Map(), // videoId → 1 (like) | -1 (dislike)
     loading: false,       // true while waiting for /api/chat or /api/auto-show to return a queue
+    isPreset: false,      // queue is the instant-load preset/cached, not real DJ output
     queue: [],
     idx: 0,
     ytReady: false,
@@ -70,6 +71,9 @@
       error_prefix: 'ERROR · {msg}',
       service_busy_state: 'CLAUDE BUSY · RETRYING…',
       service_busy_text: 'Claude is briefly overloaded. Hold on a moment and I\'ll try again.',
+      tap_hint_primary: 'TAP ANYWHERE TO START',
+      tap_hint_secondary: 'your browser needs one click before it can play audio',
+      preset_welcome: "Warming up the airwaves… tap anywhere to start.",
       dj_voice: 'DJ VOICE',
       voice_help: 'Pick the voice the DJ uses between tracks.',
       voice_default: 'System default',
@@ -158,6 +162,9 @@
       error_prefix: 'ERREUR · {msg}',
       service_busy_state: 'CLAUDE SATURÉ · NOUVELLE TENTATIVE…',
       service_busy_text: "Claude est temporairement saturé. Patiente un instant, je réessaie.",
+      tap_hint_primary: 'TOUCHEZ POUR DÉMARRER',
+      tap_hint_secondary: "votre navigateur exige un clic avant de pouvoir jouer",
+      preset_welcome: "Je chauffe la station… touchez pour démarrer.",
       dj_voice: 'VOIX DU DJ',
       voice_help: 'Choisissez la voix que le DJ utilise entre les titres.',
       voice_default: 'Voix par défaut',
@@ -661,6 +668,9 @@
   function onFirstGesture() {
     if (userActivated) return;
     userActivated = true;
+    // The tap-to-start hint has done its job. Fade it out.
+    const hint = $('tapHint');
+    if (hint) hint.hidden = true;
     document.removeEventListener('pointerdown', onFirstGesture, true);
     document.removeEventListener('keydown', onFirstGesture, true);
     // Play the queued patter first (if any), then the video.
@@ -703,6 +713,10 @@
   const PATTER_WAIT_MS = 6000;
 
   async function loadShow(data) {
+    // Cache this show for the next page load — returning visitors will see
+    // it instantly instead of the generic Sakamoto preset.
+    cacheShow(data);
+    state.isPreset = false;
     setDjText(data.say || '(silent)', false);
     state.queue = data.play || [];
     state.idx = 0;
@@ -738,6 +752,67 @@
     else { setNowState(t('idle')); setAir(false); }
   }
 
+  /* ───── PRESET / CACHED show for instant page load ─────────────────────
+     Rather than staring at a loading skeleton for 5–10s while /api/auto-show
+     runs Claude + YT + TTS, show a "warming up" queue the moment the page
+     paints:
+       - Returning visitor → last successful show restored from localStorage
+       - First-time visitor → a single hardcoded preset track (Sakamoto's
+         Merry Christmas Mr. Lawrence — a safe, universally-recognized
+         instrumental with a videoId proven stable)
+     When /api/auto-show eventually returns, we either replace this preset
+     (user hasn't tapped yet — clean swap) or stash it as pendingNext so it
+     splices in seamlessly when the preset finishes playing. */
+  const PRESET_QUEUE = [
+    {
+      videoId: '1OZDaRhHHyM',
+      title: 'Merry Christmas Mr. Lawrence',
+      artist: 'Ryuichi Sakamoto',
+      album: '1996 (Re-Mastered)',
+      duration: '4:49',
+      thumbnail: null,
+    },
+  ];
+  const SHOW_CACHE_KEY = 'miao.lastShow';
+  function readCachedShow() {
+    try {
+      const raw = localStorage.getItem(SHOW_CACHE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data?.play?.length) return null;
+      return data;
+    } catch { return null; }
+  }
+  function cacheShow(data) {
+    if (!data?.play?.length) return;
+    try {
+      localStorage.setItem(SHOW_CACHE_KEY, JSON.stringify({
+        say: data.say || '',
+        play: data.play,
+        reason: data.reason || '',
+        segue: data.segue || null,
+      }));
+    } catch {}
+  }
+  function showInitialQueue() {
+    // Fired before any API round-trip. Cached takes priority (fresher and
+    // personalized); preset is the first-time fallback.
+    const cached = readCachedShow();
+    const initial = cached || {
+      say: t('preset_welcome'),
+      play: PRESET_QUEUE,
+      reason: 'preset',
+    };
+    state.isPreset = true;   // marker so applyAutoShowIfReady knows to replace
+    state.queue = initial.play;
+    state.idx = 0;
+    renderQueue();
+    setDjText(initial.say, false);
+    setNowState(t('idle'));
+    // The tap-to-start hint banner shows until the first user gesture.
+    if (!userActivated) $('tapHint').hidden = false;
+  }
+
   /* ───── auto-start on load ─────
      Fire the fetch immediately for speed, but only apply the show once the
      YT iframe player is ready — otherwise we'd race YT init and end up with
@@ -749,22 +824,30 @@
   function startAutoShowFetch() {
     // Guests can't auto-DJ. Show a welcome state instead.
     if (!state.user || state.user.isGuest) {
-      setNowState(t('idle'));
-      const remaining = state.user ? state.user.chatsLimit - state.user.chatsUsed : null;
-      let msg;
-      if (state.user?.isGuest && remaining <= 0) {
-        msg = t('welcome_guest_zero', { limit: state.user.chatsLimit });
-      } else if (state.user?.isGuest) {
-        msg = t(remaining === 1 ? 'welcome_guest_one' : 'welcome_guest_many', { n: remaining });
-      } else {
-        msg = t('welcome_anon');
+      // Preset queue was already rendered by showInitialQueue(); don't
+      // overwrite it with the "empty" idle welcome message.
+      if (!state.isPreset) {
+        setNowState(t('idle'));
+        const remaining = state.user ? state.user.chatsLimit - state.user.chatsUsed : null;
+        let msg;
+        if (state.user?.isGuest && remaining <= 0) {
+          msg = t('welcome_guest_zero', { limit: state.user.chatsLimit });
+        } else if (state.user?.isGuest) {
+          msg = t(remaining === 1 ? 'welcome_guest_one' : 'welcome_guest_many', { n: remaining });
+        } else {
+          msg = t('welcome_anon');
+        }
+        setDjText(msg, false);
       }
-      setDjText(msg, false);
       return;
     }
-    setNowState(t('tuning_in'));
-    setDjText(t('reading_the_room'), false);
-    setLoading(true, t('tuning_in'));
+    // If the preset/cached queue is already on screen, kick off the fetch
+    // silently — the user sees the preset without the loading skeleton.
+    if (!state.isPreset) {
+      setNowState(t('tuning_in'));
+      setDjText(t('reading_the_room'), false);
+      setLoading(true, t('tuning_in'));
+    }
     autoShowPromise = fetch('/api/auto-show', { method: 'POST', credentials: 'same-origin' })
       .then(async (res) => {
         const data = await res.json();
@@ -780,21 +863,44 @@
   async function applyAutoShowIfReady() {
     if (autoShowApplied || !autoShowPromise) return;
     if (!state.ytReady) return;
-    // Skip if the user already started something themselves.
-    if (state.queue.length || state.pendingNext) return;
+    // If the user manually seeded a chat (real fresh data, not preset), we're done.
+    if (state.pendingNext) return;
+    if (state.queue.length && !state.isPreset) return;
     autoShowApplied = true;
     const data = await autoShowPromise;
     autoShowPromise = null;
     if (!data) {
       setLoading(false);
-      setNowState(t('idle'));
-      setDjText(t('welcome_anon'), false);
+      if (!state.isPreset) {
+        setNowState(t('idle'));
+        setDjText(t('welcome_anon'), false);
+      }
       return;
     }
-    if (state.queue.length || state.pendingNext) { setLoading(false); return; }
     setLoading(false);
+    if (state.pendingNext) return;
+    // Preset is on screen. If the user hasn't tapped yet, replace with fresh
+    // — no music has been playing so it's a clean swap. If they're already
+    // playing the preset, stash the fresh set as pendingNext so it splices
+    // in when the preset track ends (existing auto-DJ transition logic).
+    if (state.isPreset) {
+      if (!userActivated) {
+        state.isPreset = false;
+        await loadShow(data);
+      } else {
+        data.patterPromise = fetchPatterUrl(data);
+        state.pendingNext = data;
+        renderPrefetchHint(t(data.play.length === 1 ? 'next_set_ready_one' : 'next_set_ready_many', { n: data.play.length }));
+      }
+      return;
+    }
+    // Nothing was on screen — normal fresh load.
     await loadShow(data);
   }
+
+  // Show a cached-or-preset queue instantly so the page never feels empty
+  // while /api/auto-show does its round-trip.
+  showInitialQueue();
 
   // Bootstrap: resolve auth before deciding whether to auto-tune-in.
   bootstrap();

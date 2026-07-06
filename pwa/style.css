@@ -1603,3 +1603,57 @@ body { padding-bottom: 120px; position: relative; overflow-x: hidden; }
   .dj-voice-btn { font-size: 9px; padding: 4px 7px; }
   .dj-voice-label { max-width: 12ch; letter-spacing: 0.1em; }
 }
+
+/* ─── TAP-TO-START HINT BANNER ───────────────────────────────────────────
+   Sits at the very top of the page on cold load; explains that browsers
+   need one gesture before audio can start. Auto-dismisses on the first
+   pointerdown / keydown anywhere. */
+.tap-hint {
+  position: relative;
+  z-index: 2;
+  max-width: var(--frame-w);
+  margin: 12px auto 0;
+  padding: 12px 20px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  border: 1px solid var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  animation: tap-hint-slide-in .5s ease-out;
+}
+.tap-hint[hidden] { display: none; }
+.tap-hint-glyph {
+  font-size: 20px;
+  line-height: 1;
+  animation: tap-hint-pulse 1.2s ease-in-out infinite;
+}
+.tap-hint-primary {
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.tap-hint-secondary {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  text-transform: none;
+  flex: 1;
+}
+@keyframes tap-hint-pulse {
+  0%, 100% { transform: translateX(0); opacity: 1; }
+  50%      { transform: translateX(4px); opacity: 0.55; }
+}
+@keyframes tap-hint-slide-in {
+  from { transform: translateY(-16px); opacity: 0; }
+  to   { transform: translateY(0);      opacity: 1; }
+}
+@media (max-width: 600px) {
+  .tap-hint { flex-direction: column; gap: 4px; padding: 10px 14px; }
+  .tap-hint-secondary { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tap-hint, .tap-hint-glyph { animation: none; }
+}
