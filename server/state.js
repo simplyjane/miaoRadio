@@ -96,9 +96,13 @@ function ensureColumn(table, column, definition) {
 }
 ensureColumn('messages', 'user_id', 'INTEGER REFERENCES users(id) ON DELETE CASCADE');
 ensureColumn('plays', 'user_id', 'INTEGER REFERENCES users(id) ON DELETE CASCADE');
+// ISO country code (e.g. "CA", "JP") derived from the client IP; used by
+// /api/preset to seed first-time visitors with their country's top hits.
+ensureColumn('user_settings', 'country_code', 'TEXT');
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_messages_user_ts ON messages(user_id, ts DESC);
   CREATE INDEX IF NOT EXISTS idx_plays_user_ts ON plays(user_id, ts DESC);
+  CREATE INDEX IF NOT EXISTS idx_user_settings_country ON user_settings(country_code);
 `);
 
 /* ───── messages ───────────────────────────────────────────────────────── */
@@ -261,14 +265,22 @@ export function setCorpus(userId, { taste = '', routines = '', mood_rules = '' }
 /* ───── per-user settings ──────────────────────────────────────────────── */
 
 const stmtGetSettings = db.prepare(
-  `SELECT weather_city, tts_reference_id FROM user_settings WHERE user_id = ?`,
+  `SELECT weather_city, tts_reference_id, country_code FROM user_settings WHERE user_id = ?`,
 );
 const stmtUpsertSettings = db.prepare(`
-  INSERT INTO user_settings (user_id, weather_city, tts_reference_id, updated_at)
-  VALUES (?, ?, ?, ?)
+  INSERT INTO user_settings (user_id, weather_city, tts_reference_id, country_code, updated_at)
+  VALUES (?, ?, ?, ?, ?)
   ON CONFLICT(user_id) DO UPDATE SET
     weather_city = excluded.weather_city,
     tts_reference_id = excluded.tts_reference_id,
+    country_code = excluded.country_code,
+    updated_at = excluded.updated_at
+`);
+const stmtUpdateCountry = db.prepare(`
+  INSERT INTO user_settings (user_id, country_code, updated_at)
+  VALUES (?, ?, ?)
+  ON CONFLICT(user_id) DO UPDATE SET
+    country_code = excluded.country_code,
     updated_at = excluded.updated_at
 `);
 
@@ -277,13 +289,52 @@ export function getSettings(userId) {
   return stmtGetSettings.get(userId) || null;
 }
 
-export function setSettings(userId, { weather_city, tts_reference_id }) {
+export function setSettings(userId, { weather_city, tts_reference_id, country_code }) {
+  const existing = getSettings(userId) || {};
   stmtUpsertSettings.run(
     userId,
-    weather_city || null,
-    tts_reference_id || null,
+    weather_city !== undefined ? (weather_city || null) : (existing.weather_city || null),
+    tts_reference_id !== undefined ? (tts_reference_id || null) : (existing.tts_reference_id || null),
+    country_code !== undefined ? (country_code || null) : (existing.country_code || null),
     Date.now(),
   );
+}
+
+// Cheap targeted upsert for just the country_code — used by ensureGeoCity so
+// we don't have to round-trip through the full setSettings merge every time.
+export function setUserCountry(userId, country) {
+  if (!userId) return;
+  stmtUpdateCountry.run(userId, country || null, Date.now());
+}
+
+/* ───── top plays aggregation for /api/preset ──────────────────────────
+   Query the plays log for the most-played tracks in a 30-day window,
+   optionally scoped to a country via user_settings.country_code. */
+
+const stmtTopPlaysByCountry = db.prepare(`
+  SELECT p.video_id, p.title, p.artist, COUNT(*) AS play_count
+  FROM plays p
+  JOIN user_settings s ON s.user_id = p.user_id
+  WHERE s.country_code = ? AND p.ts > ? AND p.title IS NOT NULL
+  GROUP BY p.video_id
+  ORDER BY play_count DESC, MAX(p.ts) DESC
+  LIMIT ?
+`);
+const stmtTopPlaysGlobal = db.prepare(`
+  SELECT p.video_id, p.title, p.artist, COUNT(*) AS play_count
+  FROM plays p
+  WHERE p.ts > ? AND p.title IS NOT NULL
+  GROUP BY p.video_id
+  ORDER BY play_count DESC, MAX(p.ts) DESC
+  LIMIT ?
+`);
+
+export function getTopPlaysByCountry(country, sinceTs, limit = 8) {
+  if (!country) return [];
+  return stmtTopPlaysByCountry.all(country, sinceTs, limit);
+}
+export function getTopPlaysGlobal(sinceTs, limit = 8) {
+  return stmtTopPlaysGlobal.all(sinceTs, limit);
 }
 
 /* ───── per-user Google tokens (Calendar) ──────────────────────────────── */

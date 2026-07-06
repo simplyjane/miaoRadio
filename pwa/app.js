@@ -763,7 +763,8 @@
      When /api/auto-show eventually returns, we either replace this preset
      (user hasn't tapped yet — clean swap) or stash it as pendingNext so it
      splices in seamlessly when the preset finishes playing. */
-  const PRESET_QUEUE = [
+  // Hard fallback used only if /api/preset itself is unreachable.
+  const FALLBACK_PRESET = [
     {
       videoId: '1OZDaRhHHyM',
       title: 'Merry Christmas Mr. Lawrence',
@@ -796,21 +797,41 @@
   }
   function showInitialQueue() {
     // Fired before any API round-trip. Cached takes priority (fresher and
-    // personalized); preset is the first-time fallback.
+    // personalized); country-scoped top hits come from /api/preset; the
+    // hardcoded FALLBACK_PRESET only kicks in if the network fetch fails.
     const cached = readCachedShow();
-    const initial = cached || {
-      say: t('preset_welcome'),
-      play: PRESET_QUEUE,
-      reason: 'preset',
-    };
-    state.isPreset = true;   // marker so applyAutoShowIfReady knows to replace
-    state.queue = initial.play;
+    if (cached) {
+      state.isPreset = true;
+      state.queue = cached.play;
+      state.idx = 0;
+      renderQueue();
+      setDjText(cached.say || t('preset_welcome'), false);
+      setNowState(t('idle'));
+      if (!userActivated) $('tapHint').hidden = false;
+      return;
+    }
+    // No cache — paint the fallback so the page is never empty, then upgrade
+    // to the country-scoped top hits when /api/preset returns.
+    state.isPreset = true;
+    state.queue = FALLBACK_PRESET;
     state.idx = 0;
     renderQueue();
-    setDjText(initial.say, false);
+    setDjText(t('preset_welcome'), false);
     setNowState(t('idle'));
-    // The tap-to-start hint banner shows until the first user gesture.
     if (!userActivated) $('tapHint').hidden = false;
+    fetch('/api/preset', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data?.tracks?.length) return;
+        // Only replace if the user still hasn't started something real.
+        if (state.pendingNext) return;
+        if (!state.isPreset) return;
+        if (userActivated) return; // don't yank a track out from under them
+        state.queue = data.tracks;
+        state.idx = 0;
+        renderQueue();
+      })
+      .catch((err) => console.warn('[preset]', err));
   }
 
   /* ───── auto-start on load ─────

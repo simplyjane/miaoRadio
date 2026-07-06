@@ -11,6 +11,9 @@ import {
   setCorpus,
   getSettings,
   setSettings,
+  setUserCountry,
+  getTopPlaysByCountry,
+  getTopPlaysGlobal,
   getGoogleTokens,
   deleteGoogleTokens,
   setReaction,
@@ -118,13 +121,17 @@ function requireSignedIn(req, res) {
 async function ensureGeoCity(user, req) {
   if (!user) return;
   const existing = getSettings(user.id);
-  if (existing?.weather_city) return;
+  // Skip if we already know both city AND country.
+  if (existing?.weather_city && existing?.country_code) return;
   const geo = await lookupCityForIp(req.ip).catch(() => null);
-  if (geo?.city) {
+  if (!geo) return;
+  if (geo.city && !existing?.weather_city) {
     setSettings(user.id, {
       weather_city: geo.city,
-      tts_reference_id: existing?.tts_reference_id || null,
+      country_code: geo.country || null,
     });
+  } else if (geo.country && !existing?.country_code) {
+    setUserCountry(user.id, geo.country);
   }
 }
 
@@ -309,6 +316,60 @@ app.post('/api/played', (req, res) => {
   }
   recordPlay({ videoId, title, artist, query, userId: user.id });
   res.json({ ok: true });
+});
+
+// Country-scoped starter queue for cold page loads. Aggregates the top plays
+// from the last 30 days for the caller's country; falls back to global top,
+// then to a hardcoded singleton when the DB is still empty. Cached in-memory
+// per country for 6 hours — the underlying data changes slowly and we don't
+// need it fresher than that.
+const PRESET_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const PRESET_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const PRESET_LIMIT = 8;
+const HARD_FALLBACK_PRESET = [
+  { videoId: '1OZDaRhHHyM', title: 'Merry Christmas Mr. Lawrence', artist: 'Ryuichi Sakamoto', duration: '4:49' },
+];
+const presetCache = new Map(); // key: country || '__global__' → { at, tracks }
+
+function computePreset(country) {
+  const sinceTs = Date.now() - PRESET_WINDOW_MS;
+  const countryHits = country ? getTopPlaysByCountry(country, sinceTs, PRESET_LIMIT) : [];
+  const globalHits = countryHits.length >= 3
+    ? []
+    : getTopPlaysGlobal(sinceTs, PRESET_LIMIT);
+  const raw = countryHits.length >= 3 ? countryHits : globalHits;
+  const tracks = raw.map((r) => ({
+    videoId: r.video_id,
+    title: r.title || '?',
+    artist: r.artist || '',
+    playCount: r.play_count,
+  }));
+  return tracks.length ? tracks : HARD_FALLBACK_PRESET;
+}
+
+app.get('/api/preset', async (req, res) => {
+  // Country attribution: if the caller is signed-in or has a session with a
+  // known country in user_settings, use that. Otherwise do a fresh IP lookup.
+  let country = null;
+  const user = resolveUser(req, res);
+  if (user) {
+    country = getSettings(user.id)?.country_code || null;
+  }
+  if (!country) {
+    const geo = await lookupCityForIp(req.ip).catch(() => null);
+    country = geo?.country || null;
+  }
+  const cacheKey = country || '__global__';
+  const hit = presetCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < PRESET_CACHE_TTL_MS) {
+    return res.json({ country, tracks: hit.tracks, source: hit.source, cached: true });
+  }
+  const tracks = computePreset(country);
+  const source = tracks === HARD_FALLBACK_PRESET
+    ? 'fallback'
+    : (country && tracks.length >= 3 ? 'country' : 'global');
+  presetCache.set(cacheKey, { at: Date.now(), tracks, source });
+  res.json({ country, tracks, source, cached: false });
 });
 
 // Public — guests can browse song info too. No auth gate.
