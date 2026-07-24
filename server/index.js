@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'node:path';
 import { handleChat, handleAutoShow, getPendingPatter } from './router.js';
+import { startBoxPlayer, boxPlayEnqueue, boxControl } from './boxplayer.js';
 import { searchSongs } from './ytmusic.js';
 import { synthesizeAndCache } from './tts.js';
 import { lookupCityForIp } from './geo.js';
@@ -259,6 +260,67 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+/* ───── remote control (StackChan pet) ──────────────────────────────────
+   The pet's proxy POSTs a spoken request here (shared-token auth); the
+   owner's open PWA polls GET and runs it through the normal chat path.
+   Single-slot mailbox: a newer command replaces an unconsumed older one. */
+let remoteCmd = null; // { text, ts }
+
+app.post('/api/remote', (req, res) => {
+  const token = process.env.REMOTE_TOKEN;
+  if (!token || req.get('x-remote-token') !== token) {
+    return res.status(401).json({ error: 'bad token' });
+  }
+  const { message } = req.body ?? {};
+  if (typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ error: 'message required' });
+  }
+  remoteCmd = { text: message.trim(), ts: Date.now() };
+  res.json({ ok: true });
+});
+
+/* Watch-mode remote: play on the BOX speaker via the headless player (same DJ,
+   same radio) instead of a browser tab. Shared-token auth like /api/remote. */
+app.post('/api/box-play', (req, res) => {
+  const token = process.env.REMOTE_TOKEN;
+  if (!token || req.get('x-remote-token') !== token) {
+    return res.status(401).json({ error: 'bad token' });
+  }
+  const { message } = req.body ?? {};
+  if (typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ error: 'message required' });
+  }
+  boxPlayEnqueue(message.trim());
+  res.json({ ok: true });
+});
+
+/* Box player transport controls (watch buttons): next | prev | stop. */
+app.post('/api/box-control', (req, res) => {
+  const token = process.env.REMOTE_TOKEN;
+  if (!token || req.get('x-remote-token') !== token) {
+    return res.status(401).json({ error: 'bad token' });
+  }
+  const { action } = req.body ?? {};
+  if (!['next', 'prev', 'stop', 'pause'].includes(action)) {
+    return res.status(400).json({ error: 'bad action' });
+  }
+  boxControl(action);
+  res.json({ ok: true });
+});
+
+app.get('/api/remote', (req, res) => {
+  // Only the owner's signed-in player may consume commands (any session when
+  // ADMIN_EMAIL is unset, i.e. a private home instance).
+  const user = resolveUser(req, res);
+  const admin = process.env.ADMIN_EMAIL;
+  if (admin && user?.email?.toLowerCase() !== admin.toLowerCase()) {
+    return res.json(null);
+  }
+  const cmd = remoteCmd && Date.now() - remoteCmd.ts < 300_000 ? remoteCmd : null;
+  remoteCmd = null;
+  res.json(cmd);
+});
+
 app.post('/api/auto-show', async (req, res) => {
   const user = resolveUser(req, res);
   if (!user) return res.status(401).json({ error: 'signin_required' });
@@ -418,6 +480,7 @@ app.get('/api/search', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`miaoRadio listening on http://localhost:${PORT}`);
+  if (process.env.BOX_PLAYER === '1') startBoxPlayer();   // headless speaker player (watch mode)
   // Warm cold caches so the first real chat doesn't pay 60+ seconds for
   // Innertube to bootstrap. Fire and forget — failures don't block serving.
   warmup();

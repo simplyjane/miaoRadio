@@ -194,6 +194,12 @@ export function getUserById(id) {
   return stmtGetUserById.get(id) || null;
 }
 
+// The home-instance owner (first signed-in, non-guest user) — used by the headless
+// box player so it can run the DJ (handleChat/handleAutoShow) as a real user.
+export function getOwnerUser() {
+  return db.prepare('SELECT * FROM users WHERE is_guest = 0 ORDER BY id LIMIT 1').get() || null;
+}
+
 export function getUserByGoogleSub(sub) {
   return stmtGetUserByGoogleSub.get(sub) || null;
 }

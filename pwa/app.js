@@ -450,12 +450,8 @@
   });
 
   /* ───── chat form ───── */
-  $('chatForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
+  async function runChat(message) {
     const input = $('chatInput');
-    const message = input.value.trim();
-    if (!message) return;
-    input.value = '';
     const send = $('sendBtn');
     send.disabled = true;
     setNowState(t('thinking'));
@@ -511,7 +507,28 @@
       send.disabled = false;
       input.focus();
     }
+  }
+
+  $('chatForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = $('chatInput');
+    const message = input.value.trim();
+    if (!message) return;
+    input.value = '';
+    await runChat(message);
   });
+
+  // Remote commands from the StackChan pet: poll the mailbox and run them
+  // through the exact same path as typed chat. No document.hidden guard —
+  // the radio usually plays from a backgrounded tab.
+  setInterval(async () => {
+    if ($('sendBtn').disabled) return;            // a chat turn is already running
+    try {
+      const r = await fetch('/api/remote', { credentials: 'same-origin' });
+      const cmd = r.ok ? await r.json() : null;
+      if (cmd?.text) runChat(cmd.text);
+    } catch { /* radio keeps playing; poll again in 2s */ }
+  }, 2000);
 
   /* ───── queue rendering ───── */
   function renderQueue() {
