@@ -301,7 +301,7 @@ app.post('/api/box-control', (req, res) => {
     return res.status(401).json({ error: 'bad token' });
   }
   const { action } = req.body ?? {};
-  if (!['next', 'prev', 'stop', 'pause'].includes(action)) {
+  if (!['next', 'prev', 'stop', 'pause', 'volup', 'voldown'].includes(action)) {
     return res.status(400).json({ error: 'bad action' });
   }
   boxControl(action);

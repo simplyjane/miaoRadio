@@ -7,7 +7,7 @@
  * Stays IDLE until the watch asks for music (POST /api/box-play). Controls
  * (POST /api/box-control: next | prev | stop) drive it — e.g. the watch's buttons.
  */
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 
 import { handleChat, handleAutoShow } from './router.js';
 import { recordPlay, getOwnerUser } from './state.js';
@@ -35,8 +35,18 @@ export function boxPlayEnqueue(message) {
   active = true; pending = message; kill();     // interrupt so the new request plays now
 }
 
-/* A button/control: next | prev | stop (pause). */
+/* Adjust the box speaker's volume (PulseAudio sink). delta like '+8%' / '-8%'. */
+function setVol(delta) {
+  const sink = SINK || '@DEFAULT_SINK@';
+  execFile('pactl', ['set-sink-volume', sink, delta],
+    { env: { ...process.env, XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || '/run/user/1000' } },
+    (e) => { if (e) console.log('[boxplayer] setVol:', e.message); });
+}
+
+/* A button/control: next | prev | stop | volup | voldown. */
 export function boxControl(action) {
+  if (action === 'volup') { setVol('+8%'); return; }       // volume works anytime, even idle
+  if (action === 'voldown') { setVol('-8%'); return; }
   if (action === 'stop' || action === 'pause') { active = false; queue = []; kill(); return; }
   if (!active) return;                           // next/prev do nothing when idle — start via voice first
   if (action === 'next' || action === 'prev') { skipTo = action; kill(); }
