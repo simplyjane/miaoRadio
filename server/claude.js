@@ -8,6 +8,12 @@ const MODEL_ALIASES = {
   opus: 'claude-opus-4-7',
   sonnet: 'claude-sonnet-4-6',
   haiku: 'claude-haiku-4-5-20251001',
+  // Set CLAUDE_MODEL=gemini (or a gemini-* id) to route the DJ to Google Gemini
+  // instead of Anthropic. Uses GEMINI_API_KEY via the native generateContent API.
+  // 2.x models are deprecated for new keys — default to a current 3.x flash-lite.
+  gemini: 'gemini-3.5-flash-lite',
+  'gemini-lite': 'gemini-3.5-flash-lite',
+  'gemini-flash': 'gemini-3.5-flash',
 };
 
 function resolveModel() {
@@ -45,6 +51,10 @@ function isOverloadStatus(s) {
 export async function callClaude({ system, user, timeoutMs = 60_000 }) {
   const model = resolveModel();
   const maxTokens = Number(process.env.CLAUDE_MAX_TOKENS) || 1024;
+
+  if (model.startsWith('gemini')) {
+    return callGemini({ system, user, timeoutMs, model, maxTokens });
+  }
 
   try {
     const response = await getClient().messages.create(
@@ -98,6 +108,67 @@ function toSystemBlocks(system) {
     blocks.push({ type: 'text', text: system.volatile });
   }
   return blocks.length ? blocks : undefined;
+}
+
+/**
+ * Gemini via the native generateContent API. Same return shape as the Claude path so the
+ * DJ callers don't change. Auth is X-goog-api-key (AQ.* AI-Studio keys reject Bearer), and
+ * we DON'T send thinkingConfig — its shape changed in Gemini 3.x and an old one 400s.
+ */
+async function callGemini({ system, user, timeoutMs, model, maxTokens }) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return { is_error: true, subtype: 'error', result: 'GEMINI_API_KEY is not set' };
+
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: user ?? '' }] }],
+    generationConfig: { maxOutputTokens: Math.max(maxTokens, 1500), temperature: 0.8 },
+  };
+  const sys = geminiSystem(system);
+  if (sys) body.systemInstruction = { parts: [{ text: sys }] };
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'X-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      },
+    );
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      return {
+        is_error: true,
+        subtype: isOverloadStatus(r.status) ? 'overloaded' : 'error',
+        status: r.status,
+        result: txt || `HTTP ${r.status}`,
+      };
+    }
+    const j = await r.json();
+    const cand = j.candidates?.[0];
+    const text = (cand?.content?.parts || []).map((p) => p.text || '').join('');
+    return {
+      is_error: false,
+      subtype: 'success',
+      result: text,
+      usage: j.usageMetadata,
+      model,
+      stop_reason: cand?.finishReason,
+    };
+  } catch (err) {
+    return { is_error: true, subtype: 'error', result: err?.message || String(err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function geminiSystem(system) {
+  if (!system) return null;
+  if (typeof system === 'string') return system;
+  return [system.stable, system.volatile].filter(Boolean).join('\n\n');
 }
 
 export function parseDJResponse(text) {
