@@ -2,7 +2,12 @@ import { Innertube } from 'youtubei.js';
 
 let ytPromise;
 function getYt() {
-  if (!ytPromise) ytPromise = Innertube.create();
+  if (!ytPromise) {
+    ytPromise = Innertube.create();
+    // A failed bootstrap must not poison the cache forever — one bad init at boot
+    // made every search fail instantly (0 playable tracks) until a manual restart.
+    ytPromise.catch(() => { ytPromise = undefined; });
+  }
   return ytPromise;
 }
 
@@ -33,8 +38,19 @@ export async function searchSongs(query, limit = 5) {
   if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) {
     return cached.hits;
   }
-  const yt = await getYt();
-  const results = await yt.music.search(query, { type: 'song' });
+  let results;
+  try {
+    const yt = await getYt();
+    results = await yt.music.search(query, { type: 'song' });
+  } catch (e) {
+    // Session created fine but broke later (expired/poisoned Innertube) — drop it
+    // and retry ONCE with a fresh one so the radio self-heals instead of silently
+    // returning zero playable tracks until someone restarts the service.
+    console.log('[ytmusic] search failed, retrying with fresh session:', String(e).slice(0, 120));
+    ytPromise = undefined;
+    const yt = await getYt();
+    results = await yt.music.search(query, { type: 'song' });
+  }
 
   const sections = [];
   if (results?.songs?.contents) sections.push(results.songs.contents);
