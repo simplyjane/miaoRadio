@@ -27,7 +27,12 @@ let owner = null;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const STOP_RE = /\b(stop|pause|quiet)\b|停|别放|別放|关掉|關掉|不听|不聽|安静|安靜/i;
 
-function kill() { if (current) { try { current.kill('SIGTERM'); } catch { /* gone */ } } }
+function kill() {
+  if (!current) return;
+  // playUrl runs a `yt-dlp | mpv` pipeline in its own process group — kill the
+  // whole group, else mpv survives its shell and the track keeps playing.
+  try { process.kill(-current.pid, 'SIGTERM'); } catch { try { current.kill('SIGTERM'); } catch { /* gone */ } }
+}
 
 /* A spoken request from the watch: start (or replace) the show. */
 export function boxPlayEnqueue(message) {
@@ -47,27 +52,26 @@ function setVol(delta) {
 export function boxControl(action) {
   if (action === 'volup') { setVol('+8%'); return; }       // volume works anytime, even idle
   if (action === 'voldown') { setVol('-8%'); return; }
-  if (action === 'stop' || action === 'pause') { active = false; queue = []; kill(); return; }
+  if (action === 'stop' || action === 'pause') {
+    active = false; queue = []; kill();
+    // Belt & suspenders: kill() races the loop (a next track spawned in the same tick
+    // escapes it) — reap EVERY pipeline so stop always means silence.
+    spawn('pkill', ['-f', 'mpv --no-video --really-quiet'], { stdio: 'ignore' });
+    return;
+  }
   if (!active) return;                           // next/prev do nothing when idle — start via voice first
   if (action === 'next' || action === 'prev') { skipTo = action; kill(); }
 }
 
-function ytAudioUrl(videoId) {
+/* Play one track: yt-dlp downloads (its TLS handles YouTube's CDN; mpv/ffmpeg on
+ * 22.04 chokes with "Error decoding the received TLS packet") and pipes raw audio
+ * into mpv. Own process group so skip/stop can kill the whole pipeline. */
+function playPipeline(videoId) {
   return new Promise((resolve) => {
-    const p = spawn(YTDLP, ['-f', 'bestaudio', '-g', `https://www.youtube.com/watch?v=${videoId}`]);
-    let out = '';
-    p.stdout.on('data', (d) => (out += d));
-    p.on('close', () => resolve(out.trim().split('\n')[0] || null));
-    p.on('error', () => resolve(null));
-  });
-}
-
-function playUrl(url) {
-  return new Promise((resolve) => {
-    const args = ['--no-video', '--really-quiet', '--volume=100'];
-    if (SINK) args.push(`--audio-device=pulse/${SINK}`);
-    args.push(url);
-    current = spawn(MPV, args, { stdio: 'ignore' });
+    const sinkArg = SINK ? `--audio-device=pulse/${SINK}` : '';
+    const cmd = `${YTDLP} -q -f bestaudio -o - "https://www.youtube.com/watch?v=${videoId}" | ` +
+                `${MPV} --no-video --really-quiet --volume=100 ${sinkArg} -`;
+    current = spawn('sh', ['-c', cmd], { stdio: 'ignore', detached: true });
     const done = () => { current = null; resolve(); };
     current.on('close', done);
     current.on('error', done);
@@ -75,16 +79,17 @@ function playUrl(url) {
 }
 
 async function playTrack(t) {
-  const url = await ytAudioUrl(t.videoId);
-  if (!url) { console.log('[boxplayer] no stream:', t.title); return; }
   console.log('[boxplayer] ▶', t.title, t.artist ? `— ${t.artist}` : '');
   try { recordPlay({ videoId: t.videoId, title: t.title, artist: t.artist, query: null, userId: owner.id }); }
   catch (e) { console.log('[boxplayer] recordPlay:', e.message); }
-  await playUrl(url);
+  await playPipeline(t.videoId);
 }
 
 export function startBoxPlayer() {
   owner = getOwnerUser();
+  // If a previous instance crashed (node SEGV etc.), its detached yt-dlp|mpv pipeline
+  // survives as an orphan and keeps playing music nobody controls. Reap strays first.
+  spawn('pkill', ['-f', 'mpv --no-video --really-quiet'], { stdio: 'ignore' });
   console.log('[boxplayer] started', owner ? `for user ${owner.id}` : '(waiting for owner login)');
   (async function loop() {
     for (;;) {
@@ -106,7 +111,12 @@ export function startBoxPlayer() {
 
         const t = queue.shift();
         skipTo = null;
+        if (!active) continue;                                 // stop landed while we were fetching
+        const t0 = Date.now();
         await playTrack(t);                                    // blocks until end or a control kills it
+        if (Date.now() - t0 < 5000) {                          // died suspiciously fast (bad/blocked video?)
+          console.log(`[boxplayer] track ended after ${Math.round((Date.now() - t0) / 1000)}s:`, t.title);
+        }
         if (skipTo === 'prev') {
           queue.unshift(t);                                    // re-queue current...
           const prev = history.pop();
