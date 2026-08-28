@@ -10,7 +10,18 @@ const CACHE_DIR = path.join(ROOT, 'cache/tts');
 // Default stays 'fish' whenever a key is set, so the cloud is unchanged; the box opts
 // into edge with TTS_BACKEND=edge in its .env. One multilingual edge voice covers zh/en/fr.
 const BACKEND = process.env.TTS_BACKEND || (process.env.FISH_AUDIO_API_KEY ? 'fish' : null);
-const EDGE_VOICE = process.env.DJ_EDGE_VOICE || 'en-US-AvaMultilingualNeural';
+
+// Per-language DJ voices (edge voices are language-specific). Chinese gets a cute
+// voice by default; English/French keep their own so patter isn't accented.
+const DJ_VOICE_ZH = process.env.DJ_EDGE_VOICE_ZH || 'zh-CN-XiaoyiNeural';
+const DJ_VOICE_FR = process.env.DJ_EDGE_VOICE_FR || 'fr-FR-DeniseNeural';
+const DJ_VOICE_EN = process.env.DJ_EDGE_VOICE || 'en-US-AvaMultilingualNeural';
+
+function pickEdgeVoice(text) {
+  if (/[一-鿿]/.test(text)) return DJ_VOICE_ZH;
+  if (/[àâçéèêëîïôûùüœ]/i.test(text)) return DJ_VOICE_FR;
+  return DJ_VOICE_EN;
+}
 
 export function ttsConfigured() {
   if (BACKEND === 'edge') return true;
@@ -27,7 +38,8 @@ export async function synthesizeAndCache(text, { referenceId: refOverride } = {}
   const referenceId = (refOverride || process.env.FISH_AUDIO_REFERENCE_ID || '').trim();
   const model = process.env.FISH_AUDIO_MODEL || 's1';
   // Cache key carries the backend + voice so switching engines never serves a stale clip.
-  const voiceKey = BACKEND === 'edge' ? EDGE_VOICE : `${model}\n${referenceId}`;
+  const edgeVoice = BACKEND === 'edge' ? pickEdgeVoice(trimmed) : null;
+  const voiceKey = BACKEND === 'edge' ? edgeVoice : `${model}\n${referenceId}`;
   const cacheKey = crypto
     .createHash('sha1')
     .update(`${BACKEND}\n${voiceKey}\n${trimmed}`)
@@ -44,7 +56,7 @@ export async function synthesizeAndCache(text, { referenceId: refOverride } = {}
   if (BACKEND === 'edge') {
     // Write to a temp file then rename, so a failed synth never poisons the cache.
     const tmp = `${filepath}.tmp`;
-    const tts = new EdgeTTS({ voice: EDGE_VOICE, outputFormat: 'audio-24khz-48kbitrate-mono-mp3' });
+    const tts = new EdgeTTS({ voice: edgeVoice, outputFormat: 'audio-24khz-48kbitrate-mono-mp3' });
     await tts.ttsPromise(trimmed, tmp);
     await fs.rename(tmp, filepath);
     return `/tts/${filename}`;
